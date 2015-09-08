@@ -86,6 +86,7 @@ fromList {o = ()} (x :: xs) = In (Right (x, fromList xs))
 partial
 toList : interp FList r o -> List (r o)
 toList (In (Left ())) = []
+--toList {o = ()} xs0@(In (Right (x, xs))) = x :: toList (assert_smaller xs0 xs)
 toList {o = ()} (In (Right (x, xs))) = x :: toList xs
 
 partial
@@ -115,8 +116,16 @@ imap One f o () = ()
 imap (Sum g h) f o (Left x) = Left (imap g f o x)
 imap (Sum g h) f o (Right x) = Right (imap h f o x)
 imap (Product g h) f o (x, y) = (imap g f o x, imap h f o y)
-imap {r = r} {s = s} (Composition g h) f o x = imap {r = interp h r} {s = interp h s} g (imap h f) o x
-imap {r = r} {s = s} (Fix g) f o (In x) = In (imap {r = choice r (Mu g r)} {s = choice s (Mu g s)} g f' o x)
+imap {r = r} {s = s} (Composition g h) f o x =
+        imap {r = interp h r} {s = interp h s} g (imap h f) o x
+imap {r = r} {s = s} (Iso c d e) f o x = to ep2 (imap c f o (from ep1 x))
+    where
+        ep1 : Isomorphic (d r o) (interp c r o)
+        ep1 = e r o
+        ep2 : Isomorphic (d s o) (interp c s o)
+        ep2 = e s o
+imap {r = r} {s = s} (Fix g) f o (In x) =
+        In (imap {r = choice r (Mu g r)} {s = choice s (Mu g s)} g f' o x)
     where
         partial
         f' : arrow (choice r (Mu g r)) (choice s (Mu g s))
