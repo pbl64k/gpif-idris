@@ -24,7 +24,7 @@ mutual
         One : IxFun i o
         Sum : IxFun i o -> IxFun i o -> IxFun i o
         Product : IxFun i o -> IxFun i o -> IxFun i o
-        Composition : IxFun m o -> IxFun i m -> IxFun i o
+        Composition : {m : Type} -> IxFun m o -> IxFun i m -> IxFun i o
         Iso : (c : IxFun i o) -> (d : IndexedFunctor i o) ->
                 ((r : Indexed i) -> (out : o) -> Isomorphic (d r out) (interp c r out)) -> IxFun i o
         Fix : IxFun (Either i o) o -> IxFun i o
@@ -113,7 +113,9 @@ imap One f o () = ()
 imap (Sum g h) f o (Left x) = Left (imap g f o x)
 imap (Sum g h) f o (Right x) = Right (imap h f o x)
 imap (Product g h) f o (x, y) = (imap g f o x, imap h f o y)
---imap (Composition g h) f o x = imap g (imap h f) o x
---imap (Fix g) f o (In x) = In (imap g (merge f (imap (Fix g) f)) o x)
+imap {r = r} {s = s} (Composition g h) f o x = imap {r = interp h r} {s = interp h s} g (imap h f) o x
+--imap (Fix g) f o (In x) = In (imap ?a ?b o x)
+--    where
+--        f' = (merge f (imap (Fix g) f))
 imap (Const i) f o x = f i x
 
