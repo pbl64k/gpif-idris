@@ -108,14 +108,18 @@ merge : arrow r u -> arrow s v -> arrow (choice r s) (choice u v)
 merge f _ (Left x) = f x
 merge _ f (Right x) = f x
 
-imap : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed i} -> (c : IxFun i o) -> arrow r s -> arrow (interp c r) (interp c s)
+partial
+imap : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed i} ->
+        (c : IxFun i o) -> arrow r s -> arrow (interp c r) (interp c s)
 imap One f o () = ()
 imap (Sum g h) f o (Left x) = Left (imap g f o x)
 imap (Sum g h) f o (Right x) = Right (imap h f o x)
 imap (Product g h) f o (x, y) = (imap g f o x, imap h f o y)
 imap {r = r} {s = s} (Composition g h) f o x = imap {r = interp h r} {s = interp h s} g (imap h f) o x
---imap (Fix g) f o (In x) = In (imap ?a ?b o x)
---    where
---        f' = (merge f (imap (Fix g) f))
+imap {r = r} {s = s} (Fix g) f o (In x) = In (imap {r = choice r (Mu g r)} {s = choice s (Mu g s)} g f' o x)
+    where
+        partial
+        f' : arrow (choice r (Mu g r)) (choice s (Mu g s))
+        f' = (merge f (imap (Fix g) f))
 imap (Const i) f o x = f i x
 
