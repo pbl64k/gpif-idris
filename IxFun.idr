@@ -102,7 +102,7 @@ partial
 MyList : IxFun () ()
 MyList = Iso (Fix ListF) (\f, t => List (f t)) isoList
 
-arrow : Indexed i -> Indexed i -> Type
+arrow : {i : Type} -> Indexed i -> Indexed i -> Type
 arrow r s = (inp : _) -> r inp -> s inp
 
 merge : arrow r u -> arrow s v -> arrow (choice r s) (choice u v)
@@ -131,4 +131,12 @@ imap {r = r} {s = s} (Fix g) f o (In x) =
         f' : arrow (choice r (Mu g r)) (choice s (Mu g s))
         f' = (merge f (imap (Fix g) f))
 imap (Const i) f o x = f i x
+
+lift : {i : Type} -> (a -> b) -> (arrow {i = i} (const a) (const b))
+lift f i x = f x
+
+mapList : {a : Type} -> {b : Type} -> (a -> b) -> (List a -> List b)
+mapList {a = a} {b = b} f = imap {r = const a} {s = const b} MyList f' ()
+    where
+        f' = lift {i = ()} f
 
