@@ -15,8 +15,8 @@ IndexedFunctor : Type -> Type -> Type
 IndexedFunctor i o = Indexed i -> Indexed o
 
 choice : Indexed i -> Indexed j -> Indexed (Either i j)
-choice r s (Left i) = r i
-choice r s (Right j) = s j
+choice r _ (Left i) = r i
+choice _ s (Right j) = s j
 
 mutual
     data IxFun : (i : Type) -> (o : Type) -> Type where
@@ -34,14 +34,14 @@ mutual
         In : interp f (choice r (Mu f r)) o -> Mu f r o
 
     interp : IxFun i o -> IndexedFunctor i o
-    interp Zero r o = Void
-    interp One r o = ()
+    interp Zero _ _ = Void
+    interp One _ _ = ()
     interp (Sum f g) r o = Either (interp f r o) (interp g r o)
     interp (Product f g) r o = (interp f r o, interp g r o)
     interp (Composition f g) r o = (interp f . interp g) r o
-    interp (Iso c d e) r o = d r o
+    interp (Iso _ d _) r o = d r o
     interp (Fix f) r o = Mu f r o
-    interp (Const i) r o = r i
+    interp (Const i) r _ = r i
 
 BoolF : IxFun Void ()
 BoolF = Sum One One
@@ -111,9 +111,9 @@ merge _ f (Right x) = f x
 partial
 imap : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed i} ->
         (c : IxFun i o) -> arrow r s -> arrow (interp c r) (interp c s)
-imap One f o () = ()
-imap (Sum g h) f o (Left x) = Left (imap g f o x)
-imap (Sum g h) f o (Right x) = Right (imap h f o x)
+imap One f _ () = ()
+imap (Sum g _) f o (Left x) = Left (imap g f o x)
+imap (Sum _ h) f o (Right x) = Right (imap h f o x)
 imap (Product g h) f o (x, y) = (imap g f o x, imap h f o y)
 imap {r = r} {s = s} (Composition g h) f o x =
         imap {r = interp h r} {s = interp h s} g (imap h f) o x
@@ -129,10 +129,10 @@ imap {r = r} {s = s} (Fix g) f o (In x) =
         partial
         f' : arrow (choice r (Mu g r)) (choice s (Mu g s))
         f' = (merge f (imap (Fix g) f))
-imap (Const i) f o x = f i x
+imap (Const i) f _ x = f i x
 
 lift : {i : Type} -> (a -> b) -> (arrow {i = i} (const a) (const b))
-lift f i x = f x
+lift f _ x = f x
 
 partial
 mapList : {a : Type} -> {b : Type} -> (a -> b) -> (List a -> List b)
