@@ -83,13 +83,13 @@ fromList : List (r o) -> interp FList r o
 fromList [] = In (Left ())
 fromList {o = ()} (x :: xs) = In (Right (x, fromList xs))
 
-partial
+--partial
+%assert_total
 toList : interp FList r o -> List (r o)
 toList (In (Left ())) = []
 --toList {o = ()} xs0@(In (Right (x, xs))) = x :: toList (assert_smaller xs0 xs)
 toList {o = ()} (In (Right (x, xs))) = x :: toList xs
 
-partial
 isoList : (r : Indexed ()) -> (o : ()) -> Isomorphic (List (r o)) (interp FList r o)
 isoList r o =
         MkIso
@@ -98,12 +98,11 @@ isoList r o =
             (\_ => believe_me ())
             (\_ => believe_me ())
 
-partial
 MyList : IxFun () ()
 MyList = Iso (Fix ListF) (\f, t => List (f t)) isoList
 
 arrow : {i : Type} -> Indexed i -> Indexed i -> Type
-arrow r s = (inp : _) -> r inp -> s inp
+arrow {i = i} r s = (inp : i) -> r inp -> s inp
 
 merge : arrow r u -> arrow s v -> arrow (choice r s) (choice u v)
 merge f _ (Left x) = f x
@@ -135,8 +134,10 @@ imap (Const i) f o x = f i x
 lift : {i : Type} -> (a -> b) -> (arrow {i = i} (const a) (const b))
 lift f i x = f x
 
+partial
 mapList : {a : Type} -> {b : Type} -> (a -> b) -> (List a -> List b)
 mapList {a = a} {b = b} f = imap {r = const a} {s = const b} MyList f' ()
     where
-        f' = lift {i = ()} f
+        f' : arrow {i = ()} (const a) (const b)
+        f' = lift f
 
