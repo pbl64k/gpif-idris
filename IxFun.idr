@@ -108,7 +108,6 @@ merge : arrow r u -> arrow s v -> arrow (choice r s) (choice u v)
 merge f _ (Left x) = f x
 merge _ f (Right x) = f x
 
-partial
 imap : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed i} ->
         (c : IxFun i o) -> arrow r s -> arrow (interp c r) (interp c s)
 imap One f _ () = ()
@@ -126,7 +125,7 @@ imap {r = r} {s = s} (Iso c d e) f o x = to ep2 (imap c f o (from ep1 x))
 imap {r = r} {s = s} (Fix g) f o (In x) =
         In (imap {r = choice r (Mu g r)} {s = choice s (Mu g s)} g f' o x)
     where
-        partial
+        %assert_total
         f' : arrow (choice r (Mu g r)) (choice s (Mu g s))
         f' = (merge f (imap (Fix g) f))
 imap (Const i) f _ x = f i x
@@ -134,7 +133,6 @@ imap (Const i) f _ x = f i x
 lift : {i : Type} -> (a -> b) -> (arrow {i = i} (const a) (const b))
 lift f _ x = f x
 
-partial
 mapList : {a : Type} -> {b : Type} -> (a -> b) -> (List a -> List b)
 mapList {a = a} {b = b} f = imap {r = const a} {s = const b} MyList f' ()
     where
