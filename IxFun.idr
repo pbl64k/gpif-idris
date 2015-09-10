@@ -26,11 +26,13 @@ mutual
         Product : IxFun i o -> IxFun i o -> IxFun i o
         Composition : {m : Type} -> IxFun m o -> IxFun i m -> IxFun i o
         Iso : (c : IxFun i o) -> (d : IndexedFunctor i o) ->
-                ((r : Indexed i) -> (out : o) -> Isomorphic (d r out) (interp c r out)) -> IxFun i o
+                ((r : Indexed i) -> (out : o) -> Isomorphic (d r out) (interp c r out)) ->
+                IxFun i o
         Fix : IxFun (Either i o) o -> IxFun i o
         Const : i -> IxFun i o
     
-    data Mu : (f : IxFun (Either i o) o) -> (r : Indexed i) -> (out : o) -> Type where
+    data Mu : (f : IxFun (Either i o) o) -> (r : Indexed i) ->
+            (out : o) -> Type where
         In : interp f (choice r (Mu f r)) o -> Mu f r o
 
     interp : IxFun i o -> IndexedFunctor i o
@@ -62,7 +64,8 @@ isoBool2 : (b : interp BoolF r o) -> fromBool (toBool b) = b
 isoBool2 (Left ()) = Refl
 isoBool2 (Right ()) = Refl
 
-isoBool : (r : Indexed Void) -> (o : ()) -> Isomorphic Bool (interp BoolF r o)
+isoBool : (r : Indexed Void) -> (o : ()) ->
+        Isomorphic Bool (interp BoolF r o)
 isoBool r o =
         MkIso
             (fromBool {r = r} {o = o})
@@ -90,7 +93,8 @@ toList {o = ()} (In (Right (x, xs))) = x :: toList xs
 -- Curiously, just adding xs0@ triggers a type mismatch. Fascinating.
 --toList {o = ()} xs0@(In (Right (x, xs))) = x :: toList xs
 
-isoList : (r : Indexed ()) -> (o : ()) -> Isomorphic (List (r o)) (interp FList r o)
+isoList : (r : Indexed ()) -> (o : ()) ->
+        Isomorphic (List (r o)) (interp FList r o)
 isoList r o =
         MkIso
             (fromList {r = r} {o = o})
@@ -134,10 +138,8 @@ lift : {i : Type} -> (a -> b) -> (arrow {i = i} (const a) (const b))
 lift f _ x = f x
 
 mapList : {a : Type} -> {b : Type} -> (a -> b) -> (List a -> List b)
-mapList {a = a} {b = b} f = imap {r = const a} {s = const b} MyList f' ()
-    where
-        f' : arrow {i = ()} (const a) (const b)
-        f' = lift f
+mapList {a = a} {b = b} f =
+        imap {r = const a} {s = const b} MyList (lift f) ()
 
 mapListExample : mapList succ [1, 2, 3] = [2, 3, 4]
 mapListExample = Refl
@@ -148,9 +150,31 @@ idArrow _ = id
 cata : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
         (c : IxFun (Either i o) o) -> arrow (interp c (choice r s)) s ->
         arrow (interp (Fix c) r) s
-cata {r = r} {s = s} c phi o (In x) = phi o (imap {r = choice r (Mu c r)} {s = choice r s} c f' o x)
+cata {r = r} {s = s} c phi o (In x) =
+        phi o (imap {r = choice r (Mu c r)} {s = choice r s} c f' o x)
     where
         %assert_total
         f' : arrow (choice r (Mu c r)) (choice r s)
         f' = merge (idArrow {r = r}) (cata {r = r} {s = s} c phi)
+
+partial
+ana : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
+        (c : IxFun (Either i o) o) -> arrow s (interp c (choice r s)) ->
+        arrow s (interp (Fix c) r)
+ana {r = r} {s = s} c psy o x =
+        In (imap {r = choice r s} {s = choice r (Mu c r)} c f' o (psy o x))
+    where
+        partial
+        f' : arrow (choice r s) (choice r (Mu c r))
+        f' = merge (idArrow {r = r}) (ana {r = r} {s = s} c psy)
+
+foldr : {a : Type} -> {r : Type} -> (a -> r -> r) -> r -> List a -> r
+foldr {a = a} {r = r} c n xs =
+        cata {r = const a} {s = const r} ListF phi () (fromList xs)
+    where
+        phi : () -> Either () (a, r) -> r
+        phi = \_ => (either (const n) (uncurry c))
+
+length : List a -> Nat
+length = Main.foldr (const succ) 0
 
