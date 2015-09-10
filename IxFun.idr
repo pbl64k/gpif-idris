@@ -83,12 +83,12 @@ fromList : List (r o) -> interp FList r o
 fromList [] = In (Left ())
 fromList {o = ()} (x :: xs) = In (Right (x, fromList xs))
 
---partial
 %assert_total
 toList : interp FList r o -> List (r o)
 toList (In (Left ())) = []
---toList {o = ()} xs0@(In (Right (x, xs))) = x :: toList (assert_smaller xs0 xs)
 toList {o = ()} (In (Right (x, xs))) = x :: toList xs
+-- Curiously, just adding xs0@ triggers a type mismatch. Fascinating.
+--toList {o = ()} xs0@(In (Right (x, xs))) = x :: toList xs
 
 isoList : (r : Indexed ()) -> (o : ()) -> Isomorphic (List (r o)) (interp FList r o)
 isoList r o =
@@ -138,4 +138,19 @@ mapList {a = a} {b = b} f = imap {r = const a} {s = const b} MyList f' ()
     where
         f' : arrow {i = ()} (const a) (const b)
         f' = lift f
+
+mapListExample : mapList succ [1, 2, 3] = [2, 3, 4]
+mapListExample = Refl
+
+idArrow : {i : Type} -> {r : Indexed i} -> arrow r r
+idArrow _ = id
+
+cata : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
+        (c : IxFun (Either i o) o) -> arrow (interp c (choice r s)) s ->
+        arrow (interp (Fix c) r) s
+cata {r = r} {s = s} c phi o (In x) = phi o (imap {r = choice r (Mu c r)} {s = choice r s} c f' o x)
+    where
+        %assert_total
+        f' : arrow (choice r (Mu c r)) (choice r s)
+        f' = merge (idArrow {r = r}) (cata {r = r} {s = s} c phi)
 
