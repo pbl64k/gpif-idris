@@ -9,14 +9,14 @@ record Isomorphic a b where
     iso2 : (x : b) -> from (to x) = x
 
 Indexed : Type -> Type
-Indexed i = i -> Type
+Indexed index = index -> Type
 
 IndexedFunctor : Type -> Type -> Type
-IndexedFunctor i o = Indexed i -> Indexed o
+IndexedFunctor inputIndex outputIndex = Indexed inputIndex -> Indexed outputIndex
 
-choice : Indexed i -> Indexed j -> Indexed (Either i j)
-choice r _ (Left i) = r i
-choice _ s (Right j) = s j
+choice : Indexed firstIndex -> Indexed secondIndex ->
+        Indexed (Either firstIndex secondIndex)
+choice f g = either f g
 
 mutual
     data IxFun : (i : Type) -> (o : Type) -> Type where
@@ -174,6 +174,9 @@ foldr {a = a} {r = r} c n xs =
     where
         phi : () -> Either () (a, r) -> r
         phi = \_ => (either (const n) (uncurry c))
+
+foldrExample : Main.foldr (+) 0 [1, 2, 3] = 6
+foldrExample = Refl
 
 length : List a -> Nat
 length = Main.foldr (const succ) 0
