@@ -73,8 +73,8 @@ isoBool r o =
             isoBool1
             (isoBool2 {r = r} {o = o})
 
-MyBool : IxFun Void ()
-MyBool = Iso BoolF (\_, _ => Bool) isoBool
+IsoBool : IxFun Void ()
+IsoBool = Iso BoolF (\_, _ => Bool) isoBool
 
 ListF : IxFun (Either () ()) ()
 ListF = Sum One (Product (Const (Left ())) (Const (Right ())))
@@ -102,8 +102,8 @@ isoList r o =
             (\_ => believe_me ())
             (\_ => believe_me ())
 
-MyList : IxFun () ()
-MyList = Iso (Fix ListF) (\f, t => List (f t)) isoList
+IsoList : IxFun () ()
+IsoList = Iso (Fix ListF) (\f, t => List (f t)) isoList
 
 arrow : {i : Type} -> Indexed i -> Indexed i -> Type
 arrow {i = i} r s = (inp : i) -> r inp -> s inp
@@ -137,12 +137,12 @@ imap {r = r} {s = s} (Fix g) f o (In x) =
         f' = (merge f (imap (Fix g) f))
 imap (Const i) f _ x = f i x
 
-lift : {i : Type} -> (a -> b) -> (arrow {i = i} (const a) (const b))
+lift : {i : Type} -> (a -> b) -> arrow {i = i} (const a) (const b)
 lift f _ x = f x
 
 mapList : {a : Type} -> {b : Type} -> (a -> b) -> (List a -> List b)
 mapList {a = a} {b = b} f =
-        imap {r = const a} {s = const b} MyList (lift f) ()
+        imap {r = const a} {s = const b} IsoList (lift f) ()
 
 mapListExample : mapList succ [1, 2, 3] = [2, 3, 4]
 mapListExample = Refl
@@ -228,4 +228,21 @@ foldrExample = Refl
 
 length : List a -> Nat
 length = Main.foldr (const succ) 0
+
+data Rose : (a : Type) -> Type where
+    Fork : a -> List (Rose a) -> Rose a
+
+RoseF : IxFun (Either () ()) ()
+RoseF = Product (Const (Left ())) (Composition FList (Const (Right ())))
+
+FRose : IxFun () ()
+FRose = Fix RoseF
+
+fromRose : {r : Indexed ()} -> {o : ()} -> Rose (r o) -> interp FRose r o
+fromRose {r = r} {o = ()} (Fork x xs) =
+        In (x, fromList (imap {r = Rose . r} {s = interp FRose r} IsoList f () xs))
+    where
+        %assert_total
+        f : arrow (Rose . r) (interp FRose r)
+        f () = fromRose
 
