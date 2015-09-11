@@ -153,22 +153,30 @@ idArrow _ = id
 cata : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
         (c : IxFun (Either i o) o) -> arrow (interp c (choice r s)) s ->
         arrow (interp (Fix c) r) s
-cata {r = r} {s = s} c phi o (In x) =
-        phi o (imap {r = choice r (Mu c r)} {s = choice r s} c f o x)
+cata {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
+        phi out (imap {r = r'} {s = s'} c f out x)
     where
+        r' : Indexed (Either i o)
+        r' = choice r (Mu c r)
+        s' : Indexed (Either i o)
+        s' = choice r s
         %assert_total
-        f : arrow (choice r (Mu c r)) (choice r s)
+        f : arrow r' s'
         f = merge (idArrow {r = r}) (cata {r = r} {s = s} c phi)
 
 partial
 ana : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
         (c : IxFun (Either i o) o) -> arrow s (interp c (choice r s)) ->
         arrow s (interp (Fix c) r)
-ana {r = r} {s = s} c psy o x =
-        In (imap {r = choice r s} {s = choice r (Mu c r)} c f o (psy o x))
+ana {i = i} {o = o} {r = r} {s = s} c psy out x =
+        In (imap {r = r'} {s = s'} c f out (psy out x))
     where
+        r' : Indexed (Either i o)
+        r' = choice r s
+        s' : Indexed (Either i o)
+        s' = choice r (Mu c r)
         partial
-        f : arrow (choice r s) (choice r (Mu c r))
+        f : arrow r' s'
         f = merge (idArrow {r = r}) (ana {r = r} {s = s} c psy)
 
 partial
@@ -176,23 +184,31 @@ hylo : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
         {t : Indexed o} -> (c : IxFun (Either i o) o) ->
         arrow (interp c (choice r t)) t -> arrow s (interp c (choice r s)) ->
         arrow s t
-hylo {r = r} {s = s} {t = t} c phi psy o x =
-        phi o (imap {r = choice r s} {s = choice r t} c f o (psy o x))
+hylo {i = i} {o = o} {r = r} {s = s} {t = t} c phi psy out x =
+        phi out (imap {r = r'} {s = s'} c f out (psy out x))
     where
+        r' : Indexed (Either i o)
+        r' = choice r s
+        s' : Indexed (Either i o)
+        s' = choice r t
         partial
-        f : arrow (choice r s) (choice r t)
+        f : arrow r' s'
         f = merge (idArrow {r = r}) (hylo {r = r} {s = s} {t = t} c phi psy)
 
 para : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
         (c : IxFun (Either i o) o) ->
         arrow (interp c (choice r (\o => Pair (s o) (interp (Fix c) r o)))) s ->
         arrow (interp (Fix c) r) s
-para {r = r} {s = s} c phi o (In x) =
-        phi o (imap {r = choice r (Mu c r)} {s = choice r (\o => Pair (s o) (interp (Fix c) r o))} c f o x)
+para {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
+        phi out (imap {r = r'} {s = s'} c f out x)
     where
+        r' : Indexed (Either i o)
+        r' = choice r (Mu c r)
+        s' : Indexed (Either i o)
+        s' = choice r (\o => Pair (s o) (interp (Fix c) r o))
         %assert_total
-        f : arrow (choice r (Mu c r)) (choice r (\o => Pair (s o) (interp (Fix c) r o)))
-        f = merge (idArrow {r = r}) (\i => fanout (para {r = r} {s = s} c phi i) id)
+        f : arrow r' s'
+        f = merge (idArrow {r = r}) (\ix => fanout (para {r = r} {s = s} c phi ix) id)
 
 {-
 Metamorphisms and apomorphisms are left as an exercise for the reader. Since
