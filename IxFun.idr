@@ -168,6 +168,18 @@ ana {r = r} {s = s} c psy o x =
         f' : arrow (choice r s) (choice r (Mu c r))
         f' = merge (idArrow {r = r}) (ana {r = r} {s = s} c psy)
 
+partial
+hylo : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
+        {t : Indexed o} -> (c : IxFun (Either i o) o) ->
+        arrow (interp c (choice r t)) t -> arrow s (interp c (choice r s)) ->
+        arrow s t
+hylo {r = r} {s = s} {t = t} c phi psy o x =
+        phi o (imap {r = choice r s} {s = choice r t} c f' o (psy o x))
+    where
+        partial
+        f' : arrow (choice r s) (choice r t)
+        f' = merge (idArrow {r = r}) (hylo {r = r} {s = s} {t = t} c phi psy)
+
 foldr : {a : Type} -> {r : Type} -> (a -> r -> r) -> r -> List a -> r
 foldr {a = a} {r = r} c n xs =
         cata {r = const a} {s = const r} ListF phi () (fromList xs)
