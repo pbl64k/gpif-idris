@@ -112,6 +112,9 @@ merge : arrow r u -> arrow s v -> arrow (choice r s) (choice u v)
 merge f _ (Left x) = f x
 merge _ f (Right x) = f x
 
+fanout : (a -> b) -> (a -> c) -> a -> (b, c)
+fanout f g x = (f x, g x)
+
 imap : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed i} ->
         (c : IxFun i o) -> arrow r s -> arrow (interp c r) (interp c s)
 imap One f _ () = ()
@@ -151,22 +154,22 @@ cata : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
         (c : IxFun (Either i o) o) -> arrow (interp c (choice r s)) s ->
         arrow (interp (Fix c) r) s
 cata {r = r} {s = s} c phi o (In x) =
-        phi o (imap {r = choice r (Mu c r)} {s = choice r s} c f' o x)
+        phi o (imap {r = choice r (Mu c r)} {s = choice r s} c f o x)
     where
         %assert_total
-        f' : arrow (choice r (Mu c r)) (choice r s)
-        f' = merge (idArrow {r = r}) (cata {r = r} {s = s} c phi)
+        f : arrow (choice r (Mu c r)) (choice r s)
+        f = merge (idArrow {r = r}) (cata {r = r} {s = s} c phi)
 
 partial
 ana : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
         (c : IxFun (Either i o) o) -> arrow s (interp c (choice r s)) ->
         arrow s (interp (Fix c) r)
 ana {r = r} {s = s} c psy o x =
-        In (imap {r = choice r s} {s = choice r (Mu c r)} c f' o (psy o x))
+        In (imap {r = choice r s} {s = choice r (Mu c r)} c f o (psy o x))
     where
         partial
-        f' : arrow (choice r s) (choice r (Mu c r))
-        f' = merge (idArrow {r = r}) (ana {r = r} {s = s} c psy)
+        f : arrow (choice r s) (choice r (Mu c r))
+        f = merge (idArrow {r = r}) (ana {r = r} {s = s} c psy)
 
 partial
 hylo : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
@@ -174,11 +177,28 @@ hylo : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
         arrow (interp c (choice r t)) t -> arrow s (interp c (choice r s)) ->
         arrow s t
 hylo {r = r} {s = s} {t = t} c phi psy o x =
-        phi o (imap {r = choice r s} {s = choice r t} c f' o (psy o x))
+        phi o (imap {r = choice r s} {s = choice r t} c f o (psy o x))
     where
         partial
-        f' : arrow (choice r s) (choice r t)
-        f' = merge (idArrow {r = r}) (hylo {r = r} {s = s} {t = t} c phi psy)
+        f : arrow (choice r s) (choice r t)
+        f = merge (idArrow {r = r}) (hylo {r = r} {s = s} {t = t} c phi psy)
+
+para : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
+        (c : IxFun (Either i o) o) ->
+        arrow (interp c (choice r (\o => Pair (s o) (interp (Fix c) r o)))) s ->
+        arrow (interp (Fix c) r) s
+para {r = r} {s = s} c phi o (In x) =
+        phi o (imap {r = choice r (Mu c r)} {s = choice r (\o => Pair (s o) (interp (Fix c) r o))} c f o x)
+    where
+        %assert_total
+        f : arrow (choice r (Mu c r)) (choice r (\o => Pair (s o) (interp (Fix c) r o)))
+        f = merge (idArrow {r = r}) (\i => fanout (para {r = r} {s = s} c phi i) id)
+
+{-
+Metamorphisms and apomorphisms are left as an exercise for the reader. Since
+they're dual to hylomorphisms and paramorphisms, the derivation should be
+"easy." (Cf. cata and ana.)
+-}
 
 foldr : {a : Type} -> {r : Type} -> (a -> r -> r) -> r -> List a -> r
 foldr {a = a} {r = r} c n xs =
