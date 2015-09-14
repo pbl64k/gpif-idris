@@ -257,8 +257,8 @@ toRose {r = r} {o = ()} (In (x, xs)) =
 roseTree : Rose Nat
 roseTree = (Fork 1 [Fork 2 []])
 
-toFromRose : toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} roseTree) = roseTree
-toFromRose = Refl
+toFromRoseExample : toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} roseTree) = roseTree
+toFromRoseExample = Refl
 
 isoRose : (r : Indexed ()) -> (o : ()) ->
         Isomorphic (Rose (r o)) (interp FRose r o)
@@ -271,4 +271,10 @@ isoRose r o =
 
 IsoRose : IxFun () ()
 IsoRose = Iso FRose (\f, t => Rose (f t)) isoRose
+
+mapRose : {a : Type} -> {b : Type} -> (a -> b) -> Rose a -> Rose b
+mapRose {a = a} {b = b} f = imap {r = const a} {s = const b} IsoRose (lift f) ()
+
+mapRoseExample : mapRose succ roseTree = Fork 2 [Fork 3 []]
+mapRoseExample = Refl
 
