@@ -82,12 +82,12 @@ ListF = Sum One (Product (Const (Left ())) (Const (Right ())))
 FList : IxFun () ()
 FList = Fix ListF
 
-fromList : List (r o) -> interp FList r o
+fromList : {r : Indexed ()} -> {o : ()} -> List (r o) -> interp FList r o
 fromList [] = In (Left ())
 fromList {o = ()} (x :: xs) = In (Right (x, fromList xs))
 
 %assert_total
-toList : interp FList r o -> List (r o)
+toList : {r : Indexed ()} -> {o : ()} -> interp FList r o -> List (r o)
 toList (In (Left ())) = []
 toList {o = ()} (In (Right (x, xs))) = x :: toList xs
 -- Curiously, just adding xs0@ triggers a type mismatch. Fascinating.
@@ -245,4 +245,18 @@ fromRose {r = r} {o = ()} (Fork x xs) =
         %assert_total
         f : arrow (Rose . r) (interp FRose r)
         f () = fromRose
+
+toRose : {r : Indexed ()} -> {o : ()} -> interp FRose r o -> Rose (r o)
+toRose {r = r} {o = ()} (In (x, xs)) =
+        Fork x (imap {r = interp FRose r} {s = Rose . r} IsoList f () (toList xs))
+    where
+        %assert_total
+        f : arrow (interp FRose r) (Rose . r)
+        f () = toRose
+
+roseTree : Rose Nat
+roseTree = (Fork 1 [Fork 2 []])
+
+toFromRose : toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} roseTree) = roseTree
+toFromRose = Refl
 
