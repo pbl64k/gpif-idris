@@ -103,7 +103,7 @@ isoList r o =
             (\_ => believe_me ())
 
 IsoList : IxFun () ()
-IsoList = Iso (Fix ListF) (\f, t => List (f t)) isoList
+IsoList = Iso FList (\f, t => List (f t)) isoList
 
 arrow : {i : Type} -> Indexed i -> Indexed i -> Type
 arrow {i = i} r s = (inp : i) -> r inp -> s inp
@@ -259,4 +259,16 @@ roseTree = (Fork 1 [Fork 2 []])
 
 toFromRose : toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} roseTree) = roseTree
 toFromRose = Refl
+
+isoRose : (r : Indexed ()) -> (o : ()) ->
+        Isomorphic (Rose (r o)) (interp FRose r o)
+isoRose r o =
+        MkIso
+            (fromRose {r = r} {o = o})
+            (toRose {r = r} {o = o})
+            (\_ => believe_me ())
+            (\_ => believe_me ())
+
+IsoRose : IxFun () ()
+IsoRose = Iso FRose (\f, t => Rose (f t)) isoRose
 
