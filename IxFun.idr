@@ -278,3 +278,15 @@ mapRose {a = a} {b = b} f = imap {r = const a} {s = const b} IsoRose (lift f) ()
 mapRoseExample : mapRose succ roseTree = Fork 2 [Fork 3 []]
 mapRoseExample = Refl
 
+foldRose : {a : Type} -> {r : Type} -> (a -> List r -> r) -> Rose a -> r
+foldRose {a = a} {r = r} f xs = cata {r = const a} {s = const r} RoseF f' () (fromRose xs)
+    where
+        f' : arrow (interp RoseF (choice (const a) (const r))) (const r)
+        f' () (x, y) = f x (toList y)
+
+sumRose : Rose Nat -> Nat
+sumRose = foldRose (\x, xs => x + sum xs)
+
+sumRoseExample : sumRose roseTree = 3
+sumRoseExample = Refl
+
