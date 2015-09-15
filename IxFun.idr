@@ -1,6 +1,14 @@
 
 %default total
 
+{-
+`Isomorphic a b' witnesses the isomorphism between two types, and allows us
+to convert the values of one type into another.
+
+It might sound like a good idea to use implicit conversions instead, but that
+doesn't seem to work well in practice.
+-}
+
 record Isomorphic a b where
     constructor MkIso
     from : a -> b
@@ -8,15 +16,71 @@ record Isomorphic a b where
     iso1 : (x : a) -> to (from x) = x
     iso2 : (x : b) -> from (to x) = x
 
-Indexed : Type -> Type
-Indexed index = index -> Type
+{-
+`IndexedType a' is essentially a family of types, such that every value of
+`a' is mapped to a type. E.g., `const Bool' would be a fine example of
+`IndexedType ()', which is isomorphic to "ordinary" types, as unit type has
+a single inhabitant. `IndexedType Bool' would a be family of two types, a
+random example being:
+
+someIndexedType : IndexedType Bool
+someIndexedType True = Nat
+someIndexedType False = Nat -> Nat
+
+Here indexed are typically built of units, sums and product, e.g.
+`Either () ()' would be isomorphic to bool, its two inhabitants being
+`Left ()' and `Right ()'.
+-}
+
+IndexedType : Type -> Type
+IndexedType index = index -> Type
+
+{-
+For convience, `choice' produces a "sum" of indexed types, that is:
+
+anotherIndexedType : IndexedType (Either () Bool)
+anotherIndexedType = choice (const Bool) someIndexedType
+
+...which would map `Left ()' to `Bool', `Right True' to `Nat' and
+`Right False' to `Nat -> Nat'.
+-}
+
+choice : IndexedType firstIndex -> IndexedType secondIndex ->
+        IndexedType (Either firstIndex secondIndex)
+choice f g = either f g
+
+arrow : {i : Type} -> IndexedType i -> IndexedType i -> Type
+arrow {i = i} r s = (inp : i) -> r inp -> s inp
+
+merge : arrow r u -> arrow s v -> arrow (choice r s) (choice u v)
+merge f _ (Left x) = f x
+merge _ f (Right x) = f x
+
+fanout : (a -> b) -> (a -> c) -> a -> (b, c)
+fanout f g x = (f x, g x)
+
+idArrow : {i : Type} -> {r : IndexedType i} -> arrow r r
+idArrow _ = id
+
+{-
+Indexed functors map indexed types to indexed types. E.g.,
+`IndexedFunctor () Bool' should map all types indexed by unit to types
+indexed by `Bool'. Note that `IndexedFunctor () Bool' is just:
+
+IndexedType () -> IndexedType Bool
+
+Which, in turn, can be reduced to:
+
+(() -> Type) -> Bool -> Type
+-}
 
 IndexedFunctor : Type -> Type -> Type
-IndexedFunctor inputIndex outputIndex = Indexed inputIndex -> Indexed outputIndex
+IndexedFunctor inputIndex outputIndex =
+        IndexedType inputIndex -> IndexedType outputIndex
 
-choice : Indexed firstIndex -> Indexed secondIndex ->
-        Indexed (Either firstIndex secondIndex)
-choice f g = either f g
+{-
+Now we get to the bulk of the matter...
+-}
 
 mutual
     data IxFun : (i : Type) -> (o : Type) -> Type where
@@ -26,12 +90,12 @@ mutual
         Product : IxFun i o -> IxFun i o -> IxFun i o
         Composition : {m : Type} -> IxFun m o -> IxFun i m -> IxFun i o
         Iso : (c : IxFun i o) -> (d : IndexedFunctor i o) ->
-                ((r : Indexed i) -> (out : o) -> Isomorphic (d r out) (interp c r out)) ->
+                ((r : IndexedType i) -> (out : o) -> Isomorphic (d r out) (interp c r out)) ->
                 IxFun i o
         Fix : IxFun (Either i o) o -> IxFun i o
-        Const : i -> IxFun i o
+        Input : i -> IxFun i o
     
-    data Mu : (f : IxFun (Either i o) o) -> (r : Indexed i) ->
+    data Mu : (f : IxFun (Either i o) o) -> (r : IndexedType i) ->
             (out : o) -> Type where
         In : interp f (choice r (Mu f r)) o -> Mu f r o
 
@@ -43,7 +107,121 @@ mutual
     interp (Composition f g) r o = (interp f . interp g) r o
     interp (Iso _ d _) r o = d r o
     interp (Fix f) r o = Mu f r o
-    interp (Const i) r _ = r i
+    interp (Input i) r _ = r i
+
+imap : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType i} ->
+        (c : IxFun i o) -> arrow r s -> arrow (interp c r) (interp c s)
+imap One f _ () = ()
+imap (Sum g _) f o (Left x) = Left (imap g f o x)
+imap (Sum _ h) f o (Right x) = Right (imap h f o x)
+imap (Product g h) f o (x, y) = (imap g f o x, imap h f o y)
+imap {r = r} {s = s} (Composition g h) f o x =
+        imap {r = interp h r} {s = interp h s} g (imap h f) o x
+imap {r = r} {s = s} (Iso c d e) f o x = to ep2 (imap c f o (from ep1 x))
+    where
+        ep1 : Isomorphic (d r o) (interp c r o)
+        ep1 = e r o
+        ep2 : Isomorphic (d s o) (interp c s o)
+        ep2 = e s o
+imap {r = r} {s = s} (Fix g) f o (In x) =
+        In (imap {r = choice r (Mu g r)} {s = choice s (Mu g s)} g f' o x)
+    where
+        %assert_total
+        f' : arrow (choice r (Mu g r)) (choice s (Mu g s))
+        f' = (merge f (imap (Fix g) f))
+imap (Input i) f _ x = f i x
+
+{-
+Catamorphisms are folds.
+-}
+
+cata : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
+        (c : IxFun (Either i o) o) -> arrow (interp c (choice r s)) s ->
+        arrow (interp (Fix c) r) s
+cata {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
+        phi out (imap {r = r'} {s = s'} c f out x)
+    where
+        r' : IndexedType (Either i o)
+        r' = choice r (Mu c r)
+        s' : IndexedType (Either i o)
+        s' = choice r s
+        %assert_total
+        f : arrow r' s'
+        f = merge (idArrow {r = r}) (cata {r = r} {s = s} c phi)
+
+{-
+Anamorphisms are unfolds.
+
+Note that we can't really guarantee termination here. Unfortunately, codata
+is outside of the universe, so there doesn't seem to be a lot to do here in
+a principled fashion.
+-}
+
+partial
+ana : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
+        (c : IxFun (Either i o) o) -> arrow s (interp c (choice r s)) ->
+        arrow s (interp (Fix c) r)
+ana {i = i} {o = o} {r = r} {s = s} c psy out x =
+        In (imap {r = r'} {s = s'} c f out (psy out x))
+    where
+        r' : IndexedType (Either i o)
+        r' = choice r s
+        s' : IndexedType (Either i o)
+        s' = choice r (Mu c r)
+        partial
+        f : arrow r' s'
+        f = merge (idArrow {r = r}) (ana {r = r} {s = s} c psy)
+
+{-
+Hylomorphisms are equivalent to a composition of unfold followed by a fold.
+Since unfolds are involved, this is also partial.
+-}
+
+partial
+hylo : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
+        {t : IndexedType o} -> (c : IxFun (Either i o) o) ->
+        arrow (interp c (choice r t)) t -> arrow s (interp c (choice r s)) ->
+        arrow s t
+hylo {i = i} {o = o} {r = r} {s = s} {t = t} c phi psy out x =
+        phi out (imap {r = r'} {s = s'} c f out (psy out x))
+    where
+        r' : IndexedType (Either i o)
+        r' = choice r s
+        s' : IndexedType (Either i o)
+        s' = choice r t
+        partial
+        f : arrow r' s'
+        f = merge (idArrow {r = r}) (hylo {r = r} {s = s} {t = t} c phi psy)
+
+{-
+Paramorphisms are generalized folds, commonly described as "using their value
+and keeping it too."
+-}
+
+para : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
+        (c : IxFun (Either i o) o) ->
+        arrow (interp c (choice r (\o => Pair (s o) (interp (Fix c) r o)))) s ->
+        arrow (interp (Fix c) r) s
+para {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
+        phi out (imap {r = r'} {s = s'} c f out x)
+    where
+        r' : IndexedType (Either i o)
+        r' = choice r (Mu c r)
+        s' : IndexedType (Either i o)
+        s' = choice r (\o => Pair (s o) (interp (Fix c) r o))
+        %assert_total
+        f : arrow r' s'
+        f = merge (idArrow {r = r}) (\ix => fanout (para {r = r} {s = s} c phi ix) id)
+
+{-
+Metamorphisms and apomorphisms are left as an exercise for the reader. Since
+they're dual to hylomorphisms and paramorphisms, the derivation should be
+"easy." (Cf. `cata' and `ana'.)
+-}
+
+{-
+Booleans.
+-}
 
 BoolF : IxFun Void ()
 BoolF = Sum One One
@@ -64,7 +242,7 @@ isoBool2 : (b : interp BoolF r o) -> fromBool (toBool b) = b
 isoBool2 (Left ()) = Refl
 isoBool2 (Right ()) = Refl
 
-isoBool : (r : Indexed Void) -> (o : ()) ->
+isoBool : (r : IndexedType Void) -> (o : ()) ->
         Isomorphic Bool (interp BoolF r o)
 isoBool r o =
         MkIso
@@ -76,24 +254,28 @@ isoBool r o =
 IsoBool : IxFun Void ()
 IsoBool = Iso BoolF (\_, _ => Bool) isoBool
 
+{-
+Cons-cell lists.
+-}
+
 ListF : IxFun (Either () ()) ()
-ListF = Sum One (Product (Const (Left ())) (Const (Right ())))
+ListF = Sum One (Product (Input (Left ())) (Input (Right ())))
 
 FList : IxFun () ()
 FList = Fix ListF
 
-fromList : {r : Indexed ()} -> {o : ()} -> List (r o) -> interp FList r o
+fromList : {r : IndexedType ()} -> {o : ()} -> List (r o) -> interp FList r o
 fromList [] = In (Left ())
 fromList {o = ()} (x :: xs) = In (Right (x, fromList xs))
 
 %assert_total
-toList : {r : Indexed ()} -> {o : ()} -> interp FList r o -> List (r o)
+toList : {r : IndexedType ()} -> {o : ()} -> interp FList r o -> List (r o)
 toList (In (Left ())) = []
 toList {o = ()} (In (Right (x, xs))) = x :: toList xs
 -- Curiously, just adding xs0@ triggers a type mismatch. Fascinating.
 --toList {o = ()} xs0@(In (Right (x, xs))) = x :: toList xs
 
-isoList : (r : Indexed ()) -> (o : ()) ->
+isoList : (r : IndexedType ()) -> (o : ()) ->
         Isomorphic (List (r o)) (interp FList r o)
 isoList r o =
         MkIso
@@ -105,38 +287,6 @@ isoList r o =
 IsoList : IxFun () ()
 IsoList = Iso FList (\f, t => List (f t)) isoList
 
-arrow : {i : Type} -> Indexed i -> Indexed i -> Type
-arrow {i = i} r s = (inp : i) -> r inp -> s inp
-
-merge : arrow r u -> arrow s v -> arrow (choice r s) (choice u v)
-merge f _ (Left x) = f x
-merge _ f (Right x) = f x
-
-fanout : (a -> b) -> (a -> c) -> a -> (b, c)
-fanout f g x = (f x, g x)
-
-imap : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed i} ->
-        (c : IxFun i o) -> arrow r s -> arrow (interp c r) (interp c s)
-imap One f _ () = ()
-imap (Sum g _) f o (Left x) = Left (imap g f o x)
-imap (Sum _ h) f o (Right x) = Right (imap h f o x)
-imap (Product g h) f o (x, y) = (imap g f o x, imap h f o y)
-imap {r = r} {s = s} (Composition g h) f o x =
-        imap {r = interp h r} {s = interp h s} g (imap h f) o x
-imap {r = r} {s = s} (Iso c d e) f o x = to ep2 (imap c f o (from ep1 x))
-    where
-        ep1 : Isomorphic (d r o) (interp c r o)
-        ep1 = e r o
-        ep2 : Isomorphic (d s o) (interp c s o)
-        ep2 = e s o
-imap {r = r} {s = s} (Fix g) f o (In x) =
-        In (imap {r = choice r (Mu g r)} {s = choice s (Mu g s)} g f' o x)
-    where
-        %assert_total
-        f' : arrow (choice r (Mu g r)) (choice s (Mu g s))
-        f' = (merge f (imap (Fix g) f))
-imap (Const i) f _ x = f i x
-
 lift : {i : Type} -> (a -> b) -> arrow {i = i} (const a) (const b)
 lift f _ x = f x
 
@@ -147,74 +297,6 @@ mapList {a = a} {b = b} f =
 mapListExample : mapList succ [1, 2, 3] = [2, 3, 4]
 mapListExample = Refl
 
-idArrow : {i : Type} -> {r : Indexed i} -> arrow r r
-idArrow _ = id
-
-cata : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
-        (c : IxFun (Either i o) o) -> arrow (interp c (choice r s)) s ->
-        arrow (interp (Fix c) r) s
-cata {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
-        phi out (imap {r = r'} {s = s'} c f out x)
-    where
-        r' : Indexed (Either i o)
-        r' = choice r (Mu c r)
-        s' : Indexed (Either i o)
-        s' = choice r s
-        %assert_total
-        f : arrow r' s'
-        f = merge (idArrow {r = r}) (cata {r = r} {s = s} c phi)
-
-partial
-ana : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
-        (c : IxFun (Either i o) o) -> arrow s (interp c (choice r s)) ->
-        arrow s (interp (Fix c) r)
-ana {i = i} {o = o} {r = r} {s = s} c psy out x =
-        In (imap {r = r'} {s = s'} c f out (psy out x))
-    where
-        r' : Indexed (Either i o)
-        r' = choice r s
-        s' : Indexed (Either i o)
-        s' = choice r (Mu c r)
-        partial
-        f : arrow r' s'
-        f = merge (idArrow {r = r}) (ana {r = r} {s = s} c psy)
-
-partial
-hylo : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
-        {t : Indexed o} -> (c : IxFun (Either i o) o) ->
-        arrow (interp c (choice r t)) t -> arrow s (interp c (choice r s)) ->
-        arrow s t
-hylo {i = i} {o = o} {r = r} {s = s} {t = t} c phi psy out x =
-        phi out (imap {r = r'} {s = s'} c f out (psy out x))
-    where
-        r' : Indexed (Either i o)
-        r' = choice r s
-        s' : Indexed (Either i o)
-        s' = choice r t
-        partial
-        f : arrow r' s'
-        f = merge (idArrow {r = r}) (hylo {r = r} {s = s} {t = t} c phi psy)
-
-para : {i : Type} -> {o : Type} -> {r : Indexed i} -> {s : Indexed o} ->
-        (c : IxFun (Either i o) o) ->
-        arrow (interp c (choice r (\o => Pair (s o) (interp (Fix c) r o)))) s ->
-        arrow (interp (Fix c) r) s
-para {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
-        phi out (imap {r = r'} {s = s'} c f out x)
-    where
-        r' : Indexed (Either i o)
-        r' = choice r (Mu c r)
-        s' : Indexed (Either i o)
-        s' = choice r (\o => Pair (s o) (interp (Fix c) r o))
-        %assert_total
-        f : arrow r' s'
-        f = merge (idArrow {r = r}) (\ix => fanout (para {r = r} {s = s} c phi ix) id)
-
-{-
-Metamorphisms and apomorphisms are left as an exercise for the reader. Since
-they're dual to hylomorphisms and paramorphisms, the derivation should be
-"easy." (Cf. cata and ana.)
--}
 
 foldr : {a : Type} -> {r : Type} -> (a -> r -> r) -> r -> List a -> r
 foldr {a = a} {r = r} c n xs =
@@ -229,16 +311,20 @@ foldrExample = Refl
 length : List a -> Nat
 length = Main.foldr (const succ) 0
 
+{-
+Rose trees.
+-}
+
 data Rose : (a : Type) -> Type where
     Fork : a -> List (Rose a) -> Rose a
 
 RoseF : IxFun (Either () ()) ()
-RoseF = Product (Const (Left ())) (Composition FList (Const (Right ())))
+RoseF = Product (Input (Left ())) (Composition FList (Input (Right ())))
 
 FRose : IxFun () ()
 FRose = Fix RoseF
 
-fromRose : {r : Indexed ()} -> {o : ()} -> Rose (r o) -> interp FRose r o
+fromRose : {r : IndexedType ()} -> {o : ()} -> Rose (r o) -> interp FRose r o
 fromRose {r = r} {o = ()} (Fork x xs) =
         In (x, fromList (imap {r = Rose . r} {s = interp FRose r} IsoList f () xs))
     where
@@ -246,7 +332,7 @@ fromRose {r = r} {o = ()} (Fork x xs) =
         f : arrow (Rose . r) (interp FRose r)
         f () = fromRose
 
-toRose : {r : Indexed ()} -> {o : ()} -> interp FRose r o -> Rose (r o)
+toRose : {r : IndexedType ()} -> {o : ()} -> interp FRose r o -> Rose (r o)
 toRose {r = r} {o = ()} (In (x, xs)) =
         Fork x (imap {r = interp FRose r} {s = Rose . r} IsoList f () (toList xs))
     where
@@ -260,7 +346,7 @@ roseTree = (Fork 1 [Fork 2 []])
 toFromRoseExample : toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} roseTree) = roseTree
 toFromRoseExample = Refl
 
-isoRose : (r : Indexed ()) -> (o : ()) ->
+isoRose : (r : IndexedType ()) -> (o : ()) ->
         Isomorphic (Rose (r o)) (interp FRose r o)
 isoRose r o =
         MkIso
