@@ -86,7 +86,7 @@ anotherIndexedTypeExample3 = Refl
 
 arrow : {index : Type} -> IndexedType index -> IndexedType index -> Type
 arrow {index = index} ixTypeFrom ixTypeTo =
-        (inp : index) -> ixTypeFrom inp -> isTypeTo inp
+        (inp : index) -> ixTypeFrom inp -> ixTypeTo inp
 
 {-
 `arrow' produces the type or morphisms (generalized functions) between two
@@ -333,7 +333,7 @@ isoList r o =
 IsoList : IxFun () ()
 IsoList = Iso FList (\f, t => List (f t)) isoList
 
-lift : {i : Type} -> (a -> b) -> arrow {i = i} (const a) (const b)
+lift : {i : Type} -> (a -> b) -> arrow {index = i} (const a) (const b)
 lift f _ x = f x
 
 mapList : {a : Type} -> {b : Type} -> (a -> b) -> (List a -> List b)
