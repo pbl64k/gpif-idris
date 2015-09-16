@@ -1,14 +1,6 @@
 
 %default total
 
-{-
-`Isomorphic a b' witnesses the isomorphism between two types, and allows us
-to convert the values of one type into another.
-
-It might sound like a good idea to use implicit conversions instead, but that
-doesn't seem to work well in practice.
--}
-
 record Isomorphic a b where
     constructor MkIso
     from : a -> b
@@ -17,37 +9,80 @@ record Isomorphic a b where
     iso2 : (x : b) -> from (to x) = x
 
 {-
-`IndexedType a' is essentially a family of types, such that every value of
-`a' is mapped to a type. E.g., `const Bool' would be a fine example of
-`IndexedType ()', which is isomorphic to "ordinary" types, as unit type has
-a single inhabitant. `IndexedType Bool' would a be family of two types, a
-random example being:
+`Isomorphic a b' witnesses the isomorphism between two types, and allows us
+to convert the values of one type to another and vice versa.
 
-someIndexedType : IndexedType Bool
-someIndexedType True = Nat
-someIndexedType False = Nat -> Nat
+Note that the record is supposed to include proofs that `from' and `to' are
+each other's inverses; in practice, I chicken out and just postulate the
+"truthiness" of that in all except the simplest of cases.
 
-Here indexed are typically built of units, sums and product, e.g.
-`Either () ()' would be isomorphic to bool, its two inhabitants being
-`Left ()' and `Right ()'.
+It might sound like a good idea to use implicit conversions instead, but that
+doesn't seem to work well in practice.
 -}
 
 IndexedType : Type -> Type
 IndexedType index = index -> Type
 
 {-
-For convience, `choice' produces a "sum" of indexed types, that is:
-
-anotherIndexedType : IndexedType (Either () Bool)
-anotherIndexedType = choice (const Bool) someIndexedType
-
-...which would map `Left ()' to `Bool', `Right True' to `Nat' and
-`Right False' to `Nat -> Nat'.
+`IndexedType a' is essentially a family of types, such that every value of
+`a' is mapped to a type. E.g., `const Bool' would be a fine example of
+`IndexedType ()', which is isomorphic to "ordinary" types, as unit type has
+a single inhabitant. `IndexedType Bool' would be inhabited by families of
+two types, a random example being:
 -}
+
+someIndexedType : IndexedType Bool
+someIndexedType False = Nat
+someIndexedType True = Nat -> Nat
+
+{-
+Here indexed types are typically built out of units, sums and products, e.g.
+`Either () ()' (in type theorists' lingo, "1 + 1") would be isomorphic to
+`Bool', its two inhabitants being `Left ()' and `Right ()'. Just to
+illustrate the stuff I've introduced so far, this has little bearing on
+what's to follow:
+-}
+
+isoBoolTwo : Isomorphic Bool (Either () ())
+isoBoolTwo = MkIso from to iso1 iso2
+    where
+        from : Bool -> Either () ()
+        from False = Left ()
+        from True = Right ()
+        to : Either () () -> Bool
+        to (Left ()) = False
+        to (Right ()) = True
+        iso1 : (x : Bool) -> to (from x) = x
+        iso1 False = Refl
+        iso1 True = Refl
+        iso2 : (x : Either () ()) -> from (to x) = x
+        iso2 (Left ()) = Refl
+        iso2 (Right ()) = Refl
 
 choice : IndexedType firstIndex -> IndexedType secondIndex ->
         IndexedType (Either firstIndex secondIndex)
 choice f g = either f g
+
+{-
+For convience, `choice' produces a "sum" of indexed types, that is:
+-}
+
+anotherIndexedType : IndexedType (Either () Bool)
+anotherIndexedType = choice (const Bool) someIndexedType
+
+{-
+...which would map `Left ()' to `Bool', `Right False' to `Nat' and
+`Right True' to `Nat -> Nat':
+-}
+
+anotherIndexedTypeExample1 : anotherIndexedType (Left ()) = Bool
+anotherIndexedTypeExample1 = Refl
+
+anotherIndexedTypeExample2 : anotherIndexedType (Right False) = Nat
+anotherIndexedTypeExample2 = Refl
+
+anotherIndexedTypeExample3 : anotherIndexedType (Right True) = (Nat -> Nat)
+anotherIndexedTypeExample3 = Refl
 
 arrow : {i : Type} -> IndexedType i -> IndexedType i -> Type
 arrow {i = i} r s = (inp : i) -> r inp -> s inp
@@ -62,6 +97,10 @@ fanout f g x = (f x, g x)
 idArrow : {i : Type} -> {r : IndexedType i} -> arrow r r
 idArrow _ = id
 
+IndexedFunctor : Type -> Type -> Type
+IndexedFunctor inputIndex outputIndex =
+        IndexedType inputIndex -> IndexedType outputIndex
+
 {-
 Indexed functors map indexed types to indexed types. E.g.,
 `IndexedFunctor () Bool' should map all types indexed by unit to types
@@ -73,10 +112,6 @@ Which, in turn, can be reduced to:
 
 (() -> Type) -> Bool -> Type
 -}
-
-IndexedFunctor : Type -> Type -> Type
-IndexedFunctor inputIndex outputIndex =
-        IndexedType inputIndex -> IndexedType outputIndex
 
 {-
 Now we get to the bulk of the matter...
