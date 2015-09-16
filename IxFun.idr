@@ -95,18 +95,52 @@ index `inp', and when applied to it produces an orinary function between the
 two types produced by the corresponding indexed types when applied to the
 same `inp'. In the trivial case of `index' being a unit type, such arrows
 are isomorphic to the ordinary functions between the types "embedded" in the
-indexed types.
+indexed types. A random example:
 -}
 
-merge : arrow r u -> arrow s v -> arrow (choice r s) (choice u v)
-merge f _ (Left x) = f x
-merge _ f (Right x) = f x
+dumbIndexedType1 : IndexedType Bool
+dumbIndexedType1 False = ()
+dumbIndexedType1 True = Bool
+
+dumbIndexedType2 : IndexedType Bool
+dumbIndexedType2 False = Bool
+dumbIndexedType2 True = ()
+
+myMorphism : arrow dumbIndexedType1 dumbIndexedType2
+myMorphism False = \() => True
+myMorphism True = \_ => ()
+
+{-
+Depending on which index we want to apply it to -- `True' or `False' --
+`myMorphism' reduces either to a function from unit type to `Bool' or to a
+function from `Bool' to `()'.
+-}
+
+split : arrow r u -> arrow s v -> arrow (choice r s) (choice u v)
+split f _ (Left x) = f x
+split _ f (Right x) = f x
+
+{-
+Produces left outputs from left inputs using the first arrow, and right
+outputs from right inputs using the second arrow. Note that this is defined
+for our "arrows" rather than for ordinary functions.
+-}
 
 fanout : (a -> b) -> (a -> c) -> a -> (b, c)
 fanout f g x = (f x, g x)
 
+{-
+Produces a pair resulting from application of both given functions to our
+input. Unlike `split', this is for ordinary functions rather than our arrows
+operating on indexed types.
+-}
+
 idArrow : {i : Type} -> {r : IndexedType i} -> arrow r r
 idArrow _ = id
+
+{-
+The identity function lifted to indexed types.
+-}
 
 IndexedFunctor : Type -> Type -> Type
 IndexedFunctor inputIndex outputIndex =
@@ -174,7 +208,7 @@ imap {r = r} {s = s} (Fix g) f o (In x) =
     where
         %assert_total
         f' : arrow (choice r (Mu g r)) (choice s (Mu g s))
-        f' = (merge f (imap (Fix g) f))
+        f' = (split f (imap (Fix g) f))
 imap (Input i) f _ x = f i x
 
 {-
@@ -193,7 +227,7 @@ cata {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
         s' = choice r s
         %assert_total
         f : arrow r' s'
-        f = merge (idArrow {r = r}) (cata {r = r} {s = s} c phi)
+        f = split (idArrow {r = r}) (cata {r = r} {s = s} c phi)
 
 {-
 Anamorphisms are unfolds.
@@ -216,7 +250,7 @@ ana {i = i} {o = o} {r = r} {s = s} c psy out x =
         s' = choice r (Mu c r)
         partial
         f : arrow r' s'
-        f = merge (idArrow {r = r}) (ana {r = r} {s = s} c psy)
+        f = split (idArrow {r = r}) (ana {r = r} {s = s} c psy)
 
 {-
 Hylomorphisms are equivalent to a composition of an unfold with a fold. Since
@@ -237,7 +271,7 @@ hylo {i = i} {o = o} {r = r} {s = s} {t = t} c phi psy out x =
         s' = choice r t
         partial
         f : arrow r' s'
-        f = merge (idArrow {r = r}) (hylo {r = r} {s = s} {t = t} c phi psy)
+        f = split (idArrow {r = r}) (hylo {r = r} {s = s} {t = t} c phi psy)
 
 {-
 Paramorphisms are generalized folds, commonly described as "using their value
@@ -257,7 +291,7 @@ para {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
         s' = choice r (\o => Pair (s o) (interp (Fix c) r o))
         %assert_total
         f : arrow r' s'
-        f = merge (idArrow {r = r}) (\ix => fanout (para {r = r} {s = s} c phi ix) id)
+        f = split (idArrow {r = r}) (\ix => fanout (para {r = r} {s = s} c phi ix) id)
 
 {-
 Metamorphisms and apomorphisms are left as an exercise for the reader. Since
