@@ -84,8 +84,19 @@ anotherIndexedTypeExample2 = Refl
 anotherIndexedTypeExample3 : anotherIndexedType (Right True) = (Nat -> Nat)
 anotherIndexedTypeExample3 = Refl
 
-arrow : {i : Type} -> IndexedType i -> IndexedType i -> Type
-arrow {i = i} r s = (inp : i) -> r inp -> s inp
+arrow : {index : Type} -> IndexedType index -> IndexedType index -> Type
+arrow {index = index} ixTypeFrom ixTypeTo =
+        (inp : index) -> ixTypeFrom inp -> isTypeTo inp
+
+{-
+`arrow' produces the type or morphisms (generalized functions) between two
+indexed types using the same index. Such arrows are parametrized by a given
+index `inp', and when applied to it produces an orinary function between the
+two types produced by the corresponding indexed types when applied to the
+same `inp'. In the trivial case of `index' being a unit type, such arrows
+are isomorphic to the ordinary functions between the types "embedded" in the
+indexed types.
+-}
 
 merge : arrow r u -> arrow s v -> arrow (choice r s) (choice u v)
 merge f _ (Left x) = f x
@@ -208,8 +219,8 @@ ana {i = i} {o = o} {r = r} {s = s} c psy out x =
         f = merge (idArrow {r = r}) (ana {r = r} {s = s} c psy)
 
 {-
-Hylomorphisms are equivalent to a composition of unfold followed by a fold.
-Since unfolds are involved, this is also partial.
+Hylomorphisms are equivalent to a composition of an unfold with a fold. Since
+unfolds are involved, this is also partial.
 -}
 
 partial
@@ -250,8 +261,8 @@ para {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
 
 {-
 Metamorphisms and apomorphisms are left as an exercise for the reader. Since
-they're dual to hylomorphisms and paramorphisms, the derivation should be
-"easy." (Cf. `cata' and `ana'.)
+they're dual to hylomorphisms and paramorphisms correspondingly, the
+derivation should be "easy." (Cf. `cata' and `ana'.)
 -}
 
 {-
