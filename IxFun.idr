@@ -156,7 +156,7 @@ indexed types (that is, those that map to the same type regardless of the
 index).
 -}
 
-idArrow : {index : Type} -> {type : IndexedType index} -> r `arrow` r
+idArrow : {index : Type} -> {type : IndexedType index} -> type `arrow` type
 idArrow _ = id
 
 {-
@@ -210,7 +210,7 @@ mutual
                 IxFun inputIndex outputIndex
         Iso : (representable : IxFun inputIndex outputIndex) ->
                 (isomorphicFunctor : IndexedFunctor inputIndex outputIndex) ->
-                ((inputType : IndexedType inputIndex) -> (out : outputIndex) ->
+                        ((inputType : IndexedType inputIndex) -> (out : outputIndex) ->
                         Isomorphic (isomorphicFunctor inputType out) (interp representable inputType out)) ->
                 IxFun inputIndex outputIndex
         Fix : IxFun (Either inputIndex outputIndex) outputIndex -> IxFun inputIndex outputIndex
@@ -305,9 +305,9 @@ directly.
 
 imap : {inputIndex : Type} -> {outputIndex : Type} ->
         {inputType : IndexedType inputIndex} -> {outputType : IndexedType inputIndex} ->
-        (baseFunctorRepr : IxFun inputIndex outputIndex) ->
+        (functorRepr : IxFun inputIndex outputIndex) ->
         inputType `arrow` outputType ->
-        interp baseFunctorRepr inputType `arrow` interp baseFunctorRepr outputType
+        interp functorRepr inputType `arrow` interp functorRepr outputType
 imap One _ _ () = ()
 imap (Sum g _) f out (Left x) = Left (imap g f out x)
 imap (Sum _ g) f out (Right x) = Right (imap g f out x)
@@ -348,19 +348,26 @@ don't know how to cook it right).
 Catamorphisms are folds.
 -}
 
-cata : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
-        (c : IxFun (Either i o) o) -> interp c (union r s) `arrow` s ->
-        interp (Fix c) r `arrow` s
-cata {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
-        phi out (imap {inputType = r'} {outputType = s'} c f out x)
+cata : {inputIndex : Type} -> {outputIndex : Type} ->
+        {inputType : IndexedType inputIndex} ->
+        {outputType : IndexedType outputIndex} ->
+        (baseFunctorRepr : IxFun (Either inputIndex outputIndex) outputIndex) ->
+        interp baseFunctorRepr (union inputType outputType) `arrow` outputType ->
+        interp (Fix baseFunctorRepr) inputType `arrow` outputType
+cata {inputIndex = inputIndex} {outputIndex = outputIndex}
+        {inputType = inputType} {outputType = outputType}
+        baseFunctorRepr phi out (In x) =
+        phi out (imap {inputType = r'} {outputType = s'} baseFunctorRepr f out x)
     where
-        r' : IndexedType (Either i o)
-        r' = union r (Mu c r)
-        s' : IndexedType (Either i o)
-        s' = union r s
+        r' : IndexedType (Either inputIndex outputIndex)
+        r' = union inputType (Mu baseFunctorRepr inputType)
+        s' : IndexedType (Either inputIndex outputIndex)
+        s' = union inputType outputType
         %assert_total
         f : r' `arrow` s'
-        f = split (idArrow {type = r}) (cata {r = r} {s = s} c phi)
+        f = split (idArrow {type = inputType})
+                (cata {inputType = inputType} {outputType = outputType}
+                baseFunctorRepr phi)
 
 {-
 This is just a very general version of:
@@ -373,7 +380,8 @@ an algebra for the base functor of a recursive data type, we can lift it to
 collapse the recursive structure of data while performing some computations.
 
 The two explicit parameters are the representation of the base functor
-(needed to give the right type to the following parameters), and the algebra.
+(needed to give the right type to the following parameters), and the algebra
+(phi), which in this case is the arrow with the freaky type.
 
 `imap' is an important part of implementation, as it is used for a recursive
 call on all the recursive indices, while leaving the "input" indices
@@ -392,19 +400,26 @@ a principled fashion.
 -}
 
 partial
-ana : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
-        (c : IxFun (Either i o) o) -> s `arrow` interp c (union r s) ->
-        s `arrow` interp (Fix c) r
-ana {i = i} {o = o} {r = r} {s = s} c psy out x =
-        In (imap {inputType = r'} {outputType = s'} c f out (psy out x))
+ana : {inputIndex : Type} -> {outputIndex : Type} ->
+        {inputType : IndexedType inputIndex} ->
+        {outputType : IndexedType outputIndex} ->
+        (baseFunctorRepr : IxFun (Either inputIndex outputIndex) outputIndex) ->
+        outputType `arrow` interp baseFunctorRepr (union inputType outputType) ->
+        outputType `arrow` interp (Fix baseFunctorRepr) inputType
+ana {inputIndex = inputIndex} {outputIndex = outputIndex}
+        {inputType = inputType} {outputType = outputType}
+        baseFunctorRepr psy out x =
+        In (imap {inputType = r'} {outputType = s'} baseFunctorRepr f out (psy out x))
     where
-        r' : IndexedType (Either i o)
-        r' = union r s
-        s' : IndexedType (Either i o)
-        s' = union r (Mu c r)
+        r' : IndexedType (Either inputIndex outputIndex)
+        r' = union inputType outputType
+        s' : IndexedType (Either inputIndex outputIndex)
+        s' = union inputType (Mu baseFunctorRepr inputType)
         partial
         f : r' `arrow` s'
-        f = split (idArrow {type = r}) (ana {r = r} {s = s} c psy)
+        f = split (idArrow {type = inputType})
+                (ana {inputType = inputType} {outputType = outputType}
+                baseFunctorRepr psy)
 
 {-
 Implementation-wise, this is the perfect dual to `cata' and is trivial to get
@@ -544,7 +559,7 @@ mapListExample = Refl
 
 foldList : {a : Type} -> {r : Type} -> (a -> r -> r) -> r -> List a -> r
 foldList {a = a} {r = r} c n xs =
-        cata {r = const a} {s = const r}
+        cata {inputType = const a} {outputType = const r}
                 (baseFunctor (fromList {r = const a} {o = ()} xs)) phi ()
                 (fromList xs)
     where
@@ -614,8 +629,9 @@ mapRoseExample : mapRose succ roseTree = Fork 2 [Fork 3 []]
 mapRoseExample = Refl
 
 foldRose : {a : Type} -> {r : Type} -> (a -> List r -> r) -> Rose a -> r
-foldRose {a = a} {r = r} f xs = cata {r = const a} {s = const r}
-        (baseFunctor (fromRose {r = const a} {o = ()} xs)) f' () (fromRose xs)
+foldRose {a = a} {r = r} f xs =
+        cata {inputType = const a} {outputType = const r}
+                (baseFunctor (fromRose {r = const a} {o = ()} xs)) f' () (fromRose xs)
     where
         f' : interp RoseF (union (const a) (const r)) `arrow` const r
         f' () (x, y) = f x (toList y)
