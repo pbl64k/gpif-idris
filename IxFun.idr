@@ -27,8 +27,11 @@ IndexedType index = index -> Type
 `IndexedType a' is essentially a family of types, such that every value of
 `a' is mapped to a type. E.g., `const Bool' would be a fine example of
 `IndexedType ()', which is isomorphic to "ordinary" types, as unit type has
-a single inhabitant. `IndexedType Bool' would be inhabited by families of
-two types, a random example being:
+a single inhabitant -- similarly to how functions of type `() -> a' are
+isomorphic to values of type `a'.
+
+`IndexedType Bool' would be inhabited by "families" of two types, a random
+example being:
 -}
 
 someIndexedType : IndexedType Bool
@@ -39,8 +42,7 @@ someIndexedType True = Nat -> Nat
 Here indexed types are typically built out of units, sums and products, e.g.
 `Either () ()' (in type theorists' lingo, "1 + 1") would be isomorphic to
 `Bool', its two inhabitants being `Left ()' and `Right ()'. Just to
-illustrate the stuff I've introduced so far, this has little bearing on
-what's to follow:
+illustrate the stuff I've introduced so far:
 -}
 
 isoBoolTwo : Isomorphic Bool (Either () ())
@@ -58,6 +60,11 @@ isoBoolTwo = MkIso from to iso1 iso2
         iso2 : (x : Either () ()) -> from (to x) = x
         iso2 (Left ()) = Refl
         iso2 (Right ()) = Refl
+
+{-
+Note this has little bearing on what's to follow, being just another random
+example.
+-}
 
 choice : IndexedType firstIndex -> IndexedType secondIndex ->
         IndexedType (Either firstIndex secondIndex)
@@ -90,12 +97,15 @@ arrow {index = index} ixTypeFrom ixTypeTo =
 
 {-
 `arrow' produces the type or morphisms (generalized functions) between two
-indexed types using the same index. Such arrows are parametrized by a given
-index `inp', and when applied to it produces an orinary function between the
-two types produced by the corresponding indexed types when applied to the
-same `inp'. In the trivial case of `index' being a unit type, such arrows
-are isomorphic to the ordinary functions between the types "embedded" in the
-indexed types. A random example:
+indexed types using the same index.
+
+Such arrows are parametrized by a given index `inp', and when applied to it
+produce an orinary function between the two types yielded by the
+corresponding indexed types when applied to the same `inp'.
+
+In the trivial case of `index' being a unit type, such arrows are isomorphic
+to the ordinary functions between the types "embedded" in the indexed types.
+A random example:
 -}
 
 dumbIndexedType1 : IndexedType Bool
@@ -135,11 +145,27 @@ input. Unlike `split', this is for ordinary functions rather than our arrows
 operating on indexed types.
 -}
 
+lift : {i : Type} -> (a -> b) -> arrow {index = i} (const a) (const b)
+lift f _ x = f x
+
+{-
+Another utility combinator -- this lift a function to an arrow on constant
+indexed types (that is, those that map to the same type regardless of the
+index).
+-}
+
 idArrow : {i : Type} -> {r : IndexedType i} -> arrow r r
 idArrow _ = id
 
 {-
 The identity function lifted to indexed types.
+-}
+
+composeArrow : arrow a b -> arrow b c -> arrow a c
+composeArrow f g index = g index . f index
+
+{-
+We don't really need this, but the arrows compose nicely.
 -}
 
 IndexedFunctor : Type -> Type -> Type
@@ -156,28 +182,41 @@ IndexedType () -> IndexedType Bool
 Which, in turn, can be reduced to:
 
 (() -> Type) -> Bool -> Type
+
+Can we implement a function like that? Well, sure...
 -}
+
+randomFunctor : IndexedFunctor () Bool
+randomFunctor type = const (type ())
 
 {-
 Now we get to the bulk of the matter...
 -}
 
 mutual
-    data IxFun : (i : Type) -> (o : Type) -> Type where
-        Zero : IxFun i o
-        One : IxFun i o
-        Sum : IxFun i o -> IxFun i o -> IxFun i o
-        Product : IxFun i o -> IxFun i o -> IxFun i o
-        Composition : {m : Type} -> IxFun m o -> IxFun i m -> IxFun i o
-        Iso : (c : IxFun i o) -> (d : IndexedFunctor i o) ->
-                ((r : IndexedType i) -> (out : o) -> Isomorphic (d r out) (interp c r out)) ->
-                IxFun i o
-        Fix : IxFun (Either i o) o -> IxFun i o
-        Input : i -> IxFun i o
+    data IxFun : (inputIndex : Type) -> (outputIndex : Type) -> Type where
+        Zero : IxFun inputIndex outputIndex
+        One : IxFun inputIndex outputIndex
+        Sum : IxFun inputIndex outputIndex -> IxFun inputIndex outputIndex ->
+                IxFun inputIndex outputIndex
+        Product : IxFun inputIndex outputIndex ->
+                IxFun inputIndex outputIndex -> IxFun inputIndex outputIndex
+        Composition : {intermediateIndex : Type} ->
+                IxFun intermediateIndex outputIndex ->
+                IxFun inputIndex intermediateIndex ->
+                IxFun inputIndex outputIndex
+        Iso : (representable : IxFun inputIndex outputIndex) ->
+                (isomorphicFunctor : IndexedFunctor inputIndex outputIndex) ->
+                ((inputType : IndexedType inputIndex) -> (out : outputIndex) ->
+                        Isomorphic (isomorphicFunctor inputType out) (interp representable inputType out)) ->
+                IxFun inputIndex outputIndex
+        Fix : IxFun (Either inputIndex outputIndex) outputIndex -> IxFun inputIndex outputIndex
+        Input : inputIndex -> IxFun inputIndex outputIndex
     
-    data Mu : (f : IxFun (Either i o) o) -> (r : IndexedType i) ->
-            (out : o) -> Type where
-        In : interp f (choice r (Mu f r)) o -> Mu f r o
+    data Mu : (baseFunctorRepr : IxFun (Either inputIndex outputIndex) outputIndex) ->
+            (inputType : IndexedType inputIndex) -> (out : outputIndex) -> Type where
+        In : interp baseFunctorRepr (choice inputType (Mu baseFunctorRepr inputType)) outputIndex ->
+                Mu baseFunctorRepr inputType outputIndex
 
     interp : IxFun i o -> IndexedFunctor i o
     interp Zero _ _ = Void
@@ -188,6 +227,9 @@ mutual
     interp (Iso _ d _) r o = d r o
     interp (Fix f) r o = Mu f r o
     interp (Input i) r _ = r i
+
+baseFunctor : {f : IxFun (Either i o) o} -> Mu f _ _ -> IxFun (Either i o) o
+baseFunctor {f = f} _ = f
 
 imap : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType i} ->
         (c : IxFun i o) -> arrow r s -> arrow (interp c r) (interp c s)
@@ -367,9 +409,6 @@ isoList r o =
 IsoList : IxFun () ()
 IsoList = Iso FList (\f, t => List (f t)) isoList
 
-lift : {i : Type} -> (a -> b) -> arrow {index = i} (const a) (const b)
-lift f _ x = f x
-
 mapList : {a : Type} -> {b : Type} -> (a -> b) -> (List a -> List b)
 mapList {a = a} {b = b} f =
         imap {r = const a} {s = const b} IsoList (lift f) ()
@@ -377,19 +416,20 @@ mapList {a = a} {b = b} f =
 mapListExample : mapList succ [1, 2, 3] = [2, 3, 4]
 mapListExample = Refl
 
-
-foldr : {a : Type} -> {r : Type} -> (a -> r -> r) -> r -> List a -> r
-foldr {a = a} {r = r} c n xs =
-        cata {r = const a} {s = const r} ListF phi () (fromList xs)
+foldList : {a : Type} -> {r : Type} -> (a -> r -> r) -> r -> List a -> r
+foldList {a = a} {r = r} c n xs =
+        cata {r = const a} {s = const r}
+                (baseFunctor (fromList {r = const a} {o = ()} xs)) phi ()
+                (fromList xs)
     where
         phi : () -> Either () (a, r) -> r
         phi = \_ => (either (const n) (uncurry c))
 
-foldrExample : Main.foldr (+) 0 [1, 2, 3] = 6
-foldrExample = Refl
+foldListExample : foldList (+) 0 [1, 2, 3] = 6
+foldListExample = Refl
 
 length : List a -> Nat
-length = Main.foldr (const succ) 0
+length = foldList (const succ) 0
 
 {-
 Rose trees.
