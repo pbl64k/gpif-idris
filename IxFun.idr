@@ -93,8 +93,8 @@ anotherIndexedTypeExample3 : anotherIndexedType (Right True) = (Nat -> Nat)
 anotherIndexedTypeExample3 = Refl
 
 arrow : {index : Type} -> IndexedType index -> IndexedType index -> Type
-arrow {index = index} ixTypeFrom ixTypeTo =
-        (inp : index) -> ixTypeFrom inp -> ixTypeTo inp
+arrow {index = index} ixTypeSrc ixTypeTgt =
+        (inp : index) -> ixTypeSrc inp -> ixTypeTgt inp
 
 {-
 `arrow' produces the type or morphisms (generalized functions) between two
@@ -156,7 +156,7 @@ indexed types (that is, those that map to the same type regardless of the
 index).
 -}
 
-idArrow : {i : Type} -> {r : IndexedType i} -> r `arrow` r
+idArrow : {index : Type} -> {type : IndexedType index} -> r `arrow` r
 idArrow _ = id
 
 {-
@@ -360,7 +360,7 @@ cata {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
         s' = union r s
         %assert_total
         f : r' `arrow` s'
-        f = split (idArrow {r = r}) (cata {r = r} {s = s} c phi)
+        f = split (idArrow {type = r}) (cata {r = r} {s = s} c phi)
 
 {-
 This is just a very general version of:
@@ -404,7 +404,7 @@ ana {i = i} {o = o} {r = r} {s = s} c psy out x =
         s' = union r (Mu c r)
         partial
         f : r' `arrow` s'
-        f = split (idArrow {r = r}) (ana {r = r} {s = s} c psy)
+        f = split (idArrow {type = r}) (ana {r = r} {s = s} c psy)
 
 {-
 Implementation-wise, this is the perfect dual to `cata' and is trivial to get
@@ -430,7 +430,7 @@ hylo {i = i} {o = o} {r = r} {s = s} {t = t} c phi psy out x =
         s' = union r t
         partial
         f : r' `arrow` s'
-        f = split (idArrow {r = r}) (hylo {r = r} {s = s} {t = t} c phi psy)
+        f = split (idArrow {type = r}) (hylo {r = r} {s = s} {t = t} c phi psy)
 
 {-
 This is more efficient that composing `cata' and `ana', but otherwise
@@ -455,7 +455,7 @@ para {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
         s' = union r (\o => Pair (s o) (interp (Fix c) r o))
         %assert_total
         f : r' `arrow` s'
-        f = split (idArrow {r = r}) (\ix => fanout (para {r = r} {s = s} c phi ix) id)
+        f = split (idArrow {type = r}) (\ix => fanout (para {r = r} {s = s} c phi ix) id)
 
 {-
 Metamorphisms and apomorphisms are left as an exercise for the reader. Since
