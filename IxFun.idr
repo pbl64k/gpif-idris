@@ -71,7 +71,7 @@ choice : IndexedType firstIndex -> IndexedType secondIndex ->
 choice f g = either f g
 
 {-
-For convience, `choice' produces a "sum" of indexed types, that is:
+For convenience, `choice' produces a "sum" of indexed types, that is:
 -}
 
 anotherIndexedType : IndexedType (Either () Bool)
@@ -116,7 +116,7 @@ dumbIndexedType2 : IndexedType Bool
 dumbIndexedType2 False = Bool
 dumbIndexedType2 True = ()
 
-myMorphism : arrow dumbIndexedType1 dumbIndexedType2
+myMorphism : dumbIndexedType1 `arrow` dumbIndexedType2
 myMorphism False = \() => True
 myMorphism True = \_ => ()
 
@@ -126,7 +126,7 @@ Depending on which index we want to apply it to -- `True' or `False' --
 function from `Bool' to `()'.
 -}
 
-split : arrow r u -> arrow s v -> arrow (choice r s) (choice u v)
+split : r `arrow` u -> s `arrow` v -> choice r s `arrow` choice u v
 split f _ (Left x) = f x
 split _ f (Right x) = f x
 
@@ -145,23 +145,24 @@ input. Unlike `split', this is for ordinary functions rather than our arrows
 operating on indexed types.
 -}
 
-lift : {i : Type} -> (a -> b) -> arrow {index = i} (const a) (const b)
+lift : {index : Type} -> (a -> b) ->
+        arrow {index = index} (const a) (const b)
 lift f _ x = f x
 
 {-
-Another utility combinator -- this lift a function to an arrow on constant
+Another utility combinator -- this lifts a function to an arrow on constant
 indexed types (that is, those that map to the same type regardless of the
 index).
 -}
 
-idArrow : {i : Type} -> {r : IndexedType i} -> arrow r r
+idArrow : {i : Type} -> {r : IndexedType i} -> r `arrow` r
 idArrow _ = id
 
 {-
 The identity function lifted to indexed types.
 -}
 
-composeArrow : arrow a b -> arrow b c -> arrow a c
+composeArrow : a `arrow` b -> b `arrow` c -> a `arrow` c
 composeArrow f g index = g index . f index
 
 {-
@@ -187,10 +188,11 @@ Can we implement a function like that? Well, sure...
 -}
 
 randomFunctor : IndexedFunctor () Bool
-randomFunctor type = const (type ())
+randomFunctor ixType = const (ixType ())
 
 {-
-Now we get to the bulk of the matter...
+Now what in the seven hells does any of that have to do with algebraic data
+types, maps and folds?..
 -}
 
 mutual
@@ -213,6 +215,10 @@ mutual
         Fix : IxFun (Either inputIndex outputIndex) outputIndex -> IxFun inputIndex outputIndex
         Input : inputIndex -> IxFun inputIndex outputIndex
     
+{-
+First, we build an encoding.
+-}
+
     data Mu : (baseFunctorRepr : IxFun (Either inputIndex outputIndex) outputIndex) ->
             (inputType : IndexedType inputIndex) -> (out : outputIndex) -> Type where
         In : interp baseFunctorRepr (choice inputType (Mu baseFunctorRepr inputType)) outputIndex ->
@@ -232,7 +238,7 @@ baseFunctor : {f : IxFun (Either i o) o} -> Mu f _ _ -> IxFun (Either i o) o
 baseFunctor {f = f} _ = f
 
 imap : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType i} ->
-        (c : IxFun i o) -> arrow r s -> arrow (interp c r) (interp c s)
+        (c : IxFun i o) -> r `arrow` s -> interp c r `arrow` interp c s
 imap One f _ () = ()
 imap (Sum g _) f o (Left x) = Left (imap g f o x)
 imap (Sum _ h) f o (Right x) = Right (imap h f o x)
@@ -249,7 +255,7 @@ imap {r = r} {s = s} (Fix g) f o (In x) =
         In (imap {r = choice r (Mu g r)} {s = choice s (Mu g s)} g f' o x)
     where
         %assert_total
-        f' : arrow (choice r (Mu g r)) (choice s (Mu g s))
+        f' : choice r (Mu g r) `arrow` choice s (Mu g s)
         f' = (split f (imap (Fix g) f))
 imap (Input i) f _ x = f i x
 
@@ -258,8 +264,8 @@ Catamorphisms are folds.
 -}
 
 cata : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
-        (c : IxFun (Either i o) o) -> arrow (interp c (choice r s)) s ->
-        arrow (interp (Fix c) r) s
+        (c : IxFun (Either i o) o) -> interp c (choice r s) `arrow` s ->
+        interp (Fix c) r `arrow` s
 cata {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
         phi out (imap {r = r'} {s = s'} c f out x)
     where
@@ -268,7 +274,7 @@ cata {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
         s' : IndexedType (Either i o)
         s' = choice r s
         %assert_total
-        f : arrow r' s'
+        f : r' `arrow` s'
         f = split (idArrow {r = r}) (cata {r = r} {s = s} c phi)
 
 {-
@@ -281,8 +287,8 @@ a principled fashion.
 
 partial
 ana : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
-        (c : IxFun (Either i o) o) -> arrow s (interp c (choice r s)) ->
-        arrow s (interp (Fix c) r)
+        (c : IxFun (Either i o) o) -> s `arrow` interp c (choice r s) ->
+        s `arrow` interp (Fix c) r
 ana {i = i} {o = o} {r = r} {s = s} c psy out x =
         In (imap {r = r'} {s = s'} c f out (psy out x))
     where
@@ -291,7 +297,7 @@ ana {i = i} {o = o} {r = r} {s = s} c psy out x =
         s' : IndexedType (Either i o)
         s' = choice r (Mu c r)
         partial
-        f : arrow r' s'
+        f : r' `arrow` s'
         f = split (idArrow {r = r}) (ana {r = r} {s = s} c psy)
 
 {-
@@ -302,8 +308,8 @@ unfolds are involved, this is also partial.
 partial
 hylo : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
         {t : IndexedType o} -> (c : IxFun (Either i o) o) ->
-        arrow (interp c (choice r t)) t -> arrow s (interp c (choice r s)) ->
-        arrow s t
+        interp c (choice r t) `arrow` t -> s `arrow` interp c (choice r s) ->
+        s `arrow` t
 hylo {i = i} {o = o} {r = r} {s = s} {t = t} c phi psy out x =
         phi out (imap {r = r'} {s = s'} c f out (psy out x))
     where
@@ -312,7 +318,7 @@ hylo {i = i} {o = o} {r = r} {s = s} {t = t} c phi psy out x =
         s' : IndexedType (Either i o)
         s' = choice r t
         partial
-        f : arrow r' s'
+        f : r' `arrow` s'
         f = split (idArrow {r = r}) (hylo {r = r} {s = s} {t = t} c phi psy)
 
 {-
@@ -322,8 +328,8 @@ and keeping it too."
 
 para : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
         (c : IxFun (Either i o) o) ->
-        arrow (interp c (choice r (\o => Pair (s o) (interp (Fix c) r o)))) s ->
-        arrow (interp (Fix c) r) s
+        interp c (choice r (\o => Pair (s o) (interp (Fix c) r o))) `arrow` s ->
+        interp (Fix c) r `arrow` s
 para {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
         phi out (imap {r = r'} {s = s'} c f out x)
     where
@@ -332,7 +338,7 @@ para {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
         s' : IndexedType (Either i o)
         s' = choice r (\o => Pair (s o) (interp (Fix c) r o))
         %assert_total
-        f : arrow r' s'
+        f : r' `arrow` s'
         f = split (idArrow {r = r}) (\ix => fanout (para {r = r} {s = s} c phi ix) id)
 
 {-
@@ -428,8 +434,11 @@ foldList {a = a} {r = r} c n xs =
 foldListExample : foldList (+) 0 [1, 2, 3] = 6
 foldListExample = Refl
 
-length : List a -> Nat
-length = foldList (const succ) 0
+lengthList : List a -> Nat
+lengthList = foldList (const succ) 0
+
+sumList : List Nat -> Nat
+sumList = foldList (+) 0
 
 {-
 Rose trees.
@@ -449,7 +458,7 @@ fromRose {r = r} {o = ()} (Fork x xs) =
         In (x, fromList (imap {r = Rose . r} {s = interp FRose r} IsoList f () xs))
     where
         %assert_total
-        f : arrow (Rose . r) (interp FRose r)
+        f : (Rose . r) `arrow` interp FRose r
         f () = fromRose
 
 toRose : {r : IndexedType ()} -> {o : ()} -> interp FRose r o -> Rose (r o)
@@ -457,7 +466,7 @@ toRose {r = r} {o = ()} (In (x, xs)) =
         Fork x (imap {r = interp FRose r} {s = Rose . r} IsoList f () (toList xs))
     where
         %assert_total
-        f : arrow (interp FRose r) (Rose . r)
+        f : interp FRose r `arrow` (Rose . r)
         f () = toRose
 
 roseTree : Rose Nat
@@ -485,13 +494,14 @@ mapRoseExample : mapRose succ roseTree = Fork 2 [Fork 3 []]
 mapRoseExample = Refl
 
 foldRose : {a : Type} -> {r : Type} -> (a -> List r -> r) -> Rose a -> r
-foldRose {a = a} {r = r} f xs = cata {r = const a} {s = const r} RoseF f' () (fromRose xs)
+foldRose {a = a} {r = r} f xs = cata {r = const a} {s = const r}
+        (baseFunctor (fromRose {r = const a} {o = ()} xs)) f' () (fromRose xs)
     where
-        f' : arrow (interp RoseF (choice (const a) (const r))) (const r)
+        f' : interp RoseF (choice (const a) (const r)) `arrow` const r
         f' () (x, y) = f x (toList y)
 
 sumRose : Rose Nat -> Nat
-sumRose = foldRose (\x, xs => x + sum xs)
+sumRose = foldRose (\x, xs => x + sumList xs)
 
 sumRoseExample : sumRose roseTree = 3
 sumRoseExample = Refl
