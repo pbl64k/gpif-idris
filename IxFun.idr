@@ -27,8 +27,9 @@ IndexedType index = index -> Type
 `IndexedType a' is essentially a family of types, such that every value of
 `a' is mapped to a type. E.g., `const Bool' would be a fine example of
 `IndexedType ()', which is isomorphic to "ordinary" types, as unit type has
-a single inhabitant -- similarly to how functions of type `() -> a' are
-isomorphic to values of type `a'.
+a single inhabitant -- functions of type `() -> a' are isomorphic to values
+of type `a', if not necessarily so in practice, and we're just dealing with
+functions evaluating to types here.
 
 `IndexedType Bool' would be inhabited by "families" of two types, a random
 example being:
@@ -97,7 +98,7 @@ arrow {index = index} ixTypeFrom ixTypeTo =
 
 {-
 `arrow' produces the type or morphisms (generalized functions) between two
-indexed types using the same index.
+indexed types using the same indices.
 
 Such arrows are parametrized by a given index `inp', and when applied to it
 produce an orinary function between the two types yielded by the
@@ -351,6 +352,27 @@ cata {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
         f = split (idArrow {r = r}) (cata {r = r} {s = s} c phi)
 
 {-
+This is just a very general version of:
+
+cata : Functor f => (f a -> a) -> Fix f -> a
+
+Further complicated by the fact that it only works for fixed points of types
+representable in the universe. The point is exactly the same, though, given
+an algebra for the base functor of a recursive data type, we can lift it to
+collapse the recursive structure of data while performing some computations.
+
+The two explicit parameters are the representation of the base functor
+(needed to give the right type to the following parameters), and the algebra.
+
+`imap' is an important part of implementation, as it is used for a recursive
+call on all the recursive indices, while leaving the "input" indices
+untouched to feed the associated data directly to `phi'.
+
+Unfortunately, I see no easy way to prove that this is total, despite the
+fact that it seems really obvious.
+-}
+
+{-
 Anamorphisms are unfolds.
 
 Note that we can't really guarantee termination here. Unfortunately, codata
@@ -374,6 +396,11 @@ ana {i = i} {o = o} {r = r} {s = s} c psy out x =
         f = split (idArrow {r = r}) (ana {r = r} {s = s} c psy)
 
 {-
+Implementation-wise, this is the perfect dual to `cata' and is trivial to get
+right by reversing the arrows.
+-}
+
+{-
 Hylomorphisms are equivalent to a composition of an unfold with a fold. Since
 unfolds are involved, this is also partial.
 -}
@@ -393,6 +420,11 @@ hylo {i = i} {o = o} {r = r} {s = s} {t = t} c phi psy out x =
         partial
         f : r' `arrow` s'
         f = split (idArrow {r = r}) (hylo {r = r} {s = s} {t = t} c phi psy)
+
+{-
+This is more efficient that composing `cata' and `ana', but otherwise
+equivalent.
+-}
 
 {-
 Paramorphisms are generalized folds, commonly described as "using their value
@@ -418,6 +450,10 @@ para {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
 Metamorphisms and apomorphisms are left as an exercise for the reader. Since
 they're dual to hylomorphisms and paramorphisms correspondingly, the
 derivation should be "easy." (Cf. `cata' and `ana'.)
+-}
+
+{-
+Well, and now let's try to take off with all that stuff...
 -}
 
 {-
