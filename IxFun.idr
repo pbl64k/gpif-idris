@@ -216,13 +216,10 @@ mutual
         Input : inputIndex -> IxFun inputIndex outputIndex
     
 {-
-First, we build an encoding.
+First, we build an encoding using the universe pattern. We cannot pattern
+match on types, and in any case, there are limits to what can be done in this
+framework.
 -}
-
-    data Mu : (baseFunctorRepr : IxFun (Either inputIndex outputIndex) outputIndex) ->
-            (inputType : IndexedType inputIndex) -> (out : outputIndex) -> Type where
-        In : interp baseFunctorRepr (choice inputType (Mu baseFunctorRepr inputType)) outputIndex ->
-                Mu baseFunctorRepr inputType outputIndex
 
     interp : IxFun i o -> IndexedFunctor i o
     interp Zero _ _ = Void
@@ -234,8 +231,71 @@ First, we build an encoding.
     interp (Fix f) r o = Mu f r o
     interp (Input i) r _ = r i
 
+{-
+Now we need an interpretation function that will build actual indexed
+functors from the provided codes. Much of this stuff is straightforward and
+unsurprising:
+
+1. We have the basic building blocks in form of `Zero' and `One', which
+   simply map everything to boid and unit types correspondingly.
+
+2. Sum, product and composition are also as one would expect -- we can lift
+   pairs of compatible indexed functors to functors that yield sums or
+   products of types, and we can compose indexed functors as well.
+
+3. `Iso' is a neat trick that will later allow us to obtain `imap' that works
+   almost transparently for types that are isomorphic to those directly
+   representable in the universe. This doesn't work as neatly for
+   catamorphisms and the rest of the zoo, but it's still nice to have.
+
+4. `Fix' employs `Mu' below, which is similar to the definition of `Mu' that
+   allows us to obtain recursive data structures from functors in other
+   settings. This is the key piece, and it sheds a lot of light onto what's
+   going here with the whole indexed functors thing.
+-}
+
+    data Mu : (baseFunctorRepr : IxFun (Either inputIndex outputIndex) outputIndex) ->
+            (inputType : IndexedType inputIndex) -> (out : outputIndex) -> Type where
+        In : interp baseFunctorRepr (choice inputType (Mu baseFunctorRepr inputType)) outputIndex ->
+                Mu baseFunctorRepr inputType outputIndex
+
+{-
+Recall a straightforward `Mu' which takes a functor (in Haskell sense of the
+word) and produces a recursive data type without any parameters. This can be
+generalized to `Mu2' which takes a bifunctor and produces a recursive data
+type with one parameter (which also happens to be a "functor"). In both
+cases, one of the parameters of the base functor is used to plug the functor
+back into itself. There's no simple way to generalize this to arbitrary
+arities without having a sufficiently powerful type system. But the power of
+dependent types is enough to do precisely that!
+
+Indexed functors really are generalizations of covariant functors and
+bifunctors. An "ordinary" functor takes a single type as an argument. An
+indexed functor takes an indexed type -- which can represent arbitrarily many
+types, and thus arbitrarily many arguments. (We can also produce arbitrarily
+many types with our functors, but more on that later.)
+
+So this particular definition of `Mu' uses a simple encoding -- argument
+types resulting from indices tagged as `Left' are to be left untouched, while
+those tagged as `Right' are to be plugged back into the functor recursively.
+Thus, `Mu' takes a base indexed functor mapping types indexed with
+`Either a b' to types indexed with `b' and produces a functor mapping types
+indexed with `a' to types indexed by with `b'.
+
+There is a section with examples below, which should be able to shed further
+light on how all of this works.
+-}
+
 baseFunctor : {f : IxFun (Either i o) o} -> Mu f _ _ -> IxFun (Either i o) o
 baseFunctor {f = f} _ = f
+
+{-
+Using the foo-morphisms below for a given data type requires the knowledge of
+the type's base functor (as it determines the type of the algrebras and
+coalgebras involved). I could just spell it out (it's actually easier that
+way in practice!), but it's also possible to pull it out of the `Mu'
+directly.
+-}
 
 imap : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType i} ->
         (c : IxFun i o) -> r `arrow` s -> interp c r `arrow` interp c s
@@ -258,6 +318,19 @@ imap {r = r} {s = s} (Fix g) f o (In x) =
         f' : choice r (Mu g r) `arrow` choice s (Mu g s)
         f' = (split f (imap (Fix g) f))
 imap (Input i) f _ x = f i x
+
+{-
+This is arguably the piece de resistance here. `imap' generalizes ordinary
+functorial `fmap' (and bifunctorial `bimap') working for functors taking any
+numbers of parameters -- as long as those are representable in the universe
+encoding above! Instead of lifting functions (or pairs of functions) we're
+lifting "arrows" defined above, which are really just collections of
+functions working for all the indices involved. The implementation is
+straightforward, and the biggest challenge here is getting the implicit
+parameters to recursive calls right. Unfortunately, unlike Agda used in the
+GPIF paper, Idris doesn't seem capable of doing that on it's own (or I just
+don't know how to cook it right).
+-}
 
 {-
 Catamorphisms are folds.
