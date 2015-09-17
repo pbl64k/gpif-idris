@@ -28,8 +28,8 @@ IndexedType index = index -> Type
 `a' is mapped to a type. E.g., `const Bool' would be a fine example of
 `IndexedType ()', which is isomorphic to "ordinary" types, as unit type has
 a single inhabitant -- functions of type `() -> a' are isomorphic to values
-of type `a', if not necessarily so in practice, and we're just dealing with
-functions evaluating to types here.
+of type `a', if not necessarily completely interchangeable in practice, and
+we're just dealing with functions evaluating to types here.
 
 `IndexedType Bool' would be inhabited by "families" of two types, a random
 example being:
@@ -67,16 +67,16 @@ Note this has little bearing on what's to follow, being just another random
 example.
 -}
 
-choice : IndexedType firstIndex -> IndexedType secondIndex ->
+union : IndexedType firstIndex -> IndexedType secondIndex ->
         IndexedType (Either firstIndex secondIndex)
-choice f g = either f g
+union f g = either f g
 
 {-
-For convenience, `choice' produces a "sum" of indexed types, that is:
+For convenience, `union' produces a "sum" of indexed types, that is:
 -}
 
 anotherIndexedType : IndexedType (Either () Bool)
-anotherIndexedType = choice (const Bool) someIndexedType
+anotherIndexedType = union (const Bool) someIndexedType
 
 {-
 ...which would map `Left ()' to `Bool', `Right False' to `Nat' and
@@ -127,7 +127,7 @@ Depending on which index we want to apply it to -- `True' or `False' --
 function from `Bool' to `()'.
 -}
 
-split : r `arrow` u -> s `arrow` v -> choice r s `arrow` choice u v
+split : r `arrow` u -> s `arrow` v -> union r s `arrow` union u v
 split f _ (Left x) = f x
 split _ f (Right x) = f x
 
@@ -222,15 +222,18 @@ match on types, and in any case, there are limits to what can be done in this
 framework.
 -}
 
-    interp : IxFun i o -> IndexedFunctor i o
+    interp : IxFun inputIndex outputIndex -> IndexedFunctor inputIndex outputIndex
     interp Zero _ _ = Void
     interp One _ _ = ()
-    interp (Sum f g) r o = Either (interp f r o) (interp g r o)
-    interp (Product f g) r o = (interp f r o, interp g r o)
-    interp (Composition f g) r o = (interp f . interp g) r o
-    interp (Iso _ d _) r o = d r o
-    interp (Fix f) r o = Mu f r o
-    interp (Input i) r _ = r i
+    interp (Sum f g) inputType out =
+            Either (interp f inputType out) (interp g inputType out)
+    interp (Product f g) inputType out =
+            (interp f inputType out, interp g inputType out)
+    interp (Composition f g) inputType out =
+            (interp f . interp g) inputType out
+    interp (Iso _ hostFunctor _) inputType out = hostFunctor inputType out
+    interp (Fix functor) inputType out = Mu functor inputType out
+    interp (Input inp) inputType _ = inputType inp
 
 {-
 Now we need an interpretation function that will build actual indexed
@@ -238,7 +241,7 @@ functors from the provided codes. Much of this stuff is straightforward and
 unsurprising:
 
 1. We have the basic building blocks in form of `Zero' and `One', which
-   simply map everything to boid and unit types correspondingly.
+   simply map everything to void and unit types correspondingly.
 
 2. Sum, product and composition are also as one would expect -- we can lift
    pairs of compatible indexed functors to functors that yield sums or
@@ -257,7 +260,7 @@ unsurprising:
 
     data Mu : (baseFunctorRepr : IxFun (Either inputIndex outputIndex) outputIndex) ->
             (inputType : IndexedType inputIndex) -> (out : outputIndex) -> Type where
-        In : interp baseFunctorRepr (choice inputType (Mu baseFunctorRepr inputType)) outputIndex ->
+        In : interp baseFunctorRepr (union inputType (Mu baseFunctorRepr inputType)) outputIndex ->
                 Mu baseFunctorRepr inputType outputIndex
 
 {-
@@ -287,8 +290,10 @@ There is a section with examples below, which should be able to shed further
 light on how all of this works.
 -}
 
-baseFunctor : {f : IxFun (Either i o) o} -> Mu f _ _ -> IxFun (Either i o) o
-baseFunctor {f = f} _ = f
+baseFunctor :
+        {functor : IxFun (Either inputIndex outputIndex) outputIndex} ->
+        Mu functor _ _ -> IxFun (Either inputIndex outputIndex) outputIndex
+baseFunctor {functor = functor} _ = functor
 
 {-
 Using the foo-morphisms below for a given data type requires the knowledge of
@@ -298,27 +303,33 @@ way in practice!), but it's also possible to pull it out of the `Mu'
 directly.
 -}
 
-imap : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType i} ->
-        (c : IxFun i o) -> r `arrow` s -> interp c r `arrow` interp c s
-imap One f _ () = ()
-imap (Sum g _) f o (Left x) = Left (imap g f o x)
-imap (Sum _ h) f o (Right x) = Right (imap h f o x)
-imap (Product g h) f o (x, y) = (imap g f o x, imap h f o y)
-imap {r = r} {s = s} (Composition g h) f o x =
-        imap {r = interp h r} {s = interp h s} g (imap h f) o x
-imap {r = r} {s = s} (Iso c d e) f o x = to ep2 (imap c f o (from ep1 x))
+imap : {inputIndex : Type} -> {outputIndex : Type} ->
+        {inputType : IndexedType inputIndex} -> {outputType : IndexedType inputIndex} ->
+        (baseFunctorRepr : IxFun inputIndex outputIndex) ->
+        inputType `arrow` outputType ->
+        interp baseFunctorRepr inputType `arrow` interp baseFunctorRepr outputType
+imap One _ _ () = ()
+imap (Sum g _) f out (Left x) = Left (imap g f out x)
+imap (Sum _ g) f out (Right x) = Right (imap g f out x)
+imap (Product g h) f out (x, y) = (imap g f out x, imap h f out y)
+imap {inputType = inputType} {outputType = outputType} (Composition g h) f out x =
+        imap {inputType = interp h inputType} {outputType = interp h outputType}
+                g (imap h f) out x
+imap {inputType = inputType} {outputType = outputType} (Iso repr host isomorphism) f out x =
+        to iso2 (imap repr f out (from iso1 x))
     where
-        ep1 : Isomorphic (d r o) (interp c r o)
-        ep1 = e r o
-        ep2 : Isomorphic (d s o) (interp c s o)
-        ep2 = e s o
-imap {r = r} {s = s} (Fix g) f o (In x) =
-        In (imap {r = choice r (Mu g r)} {s = choice s (Mu g s)} g f' o x)
+        iso1 : Isomorphic (host inputType out) (interp repr inputType out)
+        iso1 = isomorphism inputType out
+        iso2 : Isomorphic (host outputType out) (interp repr outputType out)
+        iso2 = isomorphism outputType out
+imap {inputType = inputType} {outputType = outputType} (Fix g) f out (In x) =
+        In (imap {inputType = union inputType (Mu g inputType)}
+                {outputType = union outputType (Mu g outputType)} g f' out x)
     where
         %assert_total
-        f' : choice r (Mu g r) `arrow` choice s (Mu g s)
-        f' = (split f (imap (Fix g) f))
-imap (Input i) f _ x = f i x
+        f' : union inputType (Mu g inputType) `arrow` union outputType (Mu g outputType)
+        f' = split f (imap (Fix g) f)
+imap (Input inp) f _ x = f inp x
 
 {-
 This is arguably the piece de resistance here. `imap' generalizes ordinary
@@ -338,15 +349,15 @@ Catamorphisms are folds.
 -}
 
 cata : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
-        (c : IxFun (Either i o) o) -> interp c (choice r s) `arrow` s ->
+        (c : IxFun (Either i o) o) -> interp c (union r s) `arrow` s ->
         interp (Fix c) r `arrow` s
 cata {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
-        phi out (imap {r = r'} {s = s'} c f out x)
+        phi out (imap {inputType = r'} {outputType = s'} c f out x)
     where
         r' : IndexedType (Either i o)
-        r' = choice r (Mu c r)
+        r' = union r (Mu c r)
         s' : IndexedType (Either i o)
-        s' = choice r s
+        s' = union r s
         %assert_total
         f : r' `arrow` s'
         f = split (idArrow {r = r}) (cata {r = r} {s = s} c phi)
@@ -382,15 +393,15 @@ a principled fashion.
 
 partial
 ana : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
-        (c : IxFun (Either i o) o) -> s `arrow` interp c (choice r s) ->
+        (c : IxFun (Either i o) o) -> s `arrow` interp c (union r s) ->
         s `arrow` interp (Fix c) r
 ana {i = i} {o = o} {r = r} {s = s} c psy out x =
-        In (imap {r = r'} {s = s'} c f out (psy out x))
+        In (imap {inputType = r'} {outputType = s'} c f out (psy out x))
     where
         r' : IndexedType (Either i o)
-        r' = choice r s
+        r' = union r s
         s' : IndexedType (Either i o)
-        s' = choice r (Mu c r)
+        s' = union r (Mu c r)
         partial
         f : r' `arrow` s'
         f = split (idArrow {r = r}) (ana {r = r} {s = s} c psy)
@@ -408,15 +419,15 @@ unfolds are involved, this is also partial.
 partial
 hylo : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
         {t : IndexedType o} -> (c : IxFun (Either i o) o) ->
-        interp c (choice r t) `arrow` t -> s `arrow` interp c (choice r s) ->
+        interp c (union r t) `arrow` t -> s `arrow` interp c (union r s) ->
         s `arrow` t
 hylo {i = i} {o = o} {r = r} {s = s} {t = t} c phi psy out x =
-        phi out (imap {r = r'} {s = s'} c f out (psy out x))
+        phi out (imap {inputType = r'} {outputType = s'} c f out (psy out x))
     where
         r' : IndexedType (Either i o)
-        r' = choice r s
+        r' = union r s
         s' : IndexedType (Either i o)
-        s' = choice r t
+        s' = union r t
         partial
         f : r' `arrow` s'
         f = split (idArrow {r = r}) (hylo {r = r} {s = s} {t = t} c phi psy)
@@ -433,15 +444,15 @@ and keeping it too."
 
 para : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
         (c : IxFun (Either i o) o) ->
-        interp c (choice r (\o => Pair (s o) (interp (Fix c) r o))) `arrow` s ->
+        interp c (union r (\o => Pair (s o) (interp (Fix c) r o))) `arrow` s ->
         interp (Fix c) r `arrow` s
 para {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
-        phi out (imap {r = r'} {s = s'} c f out x)
+        phi out (imap {inputType = r'} {outputType = s'} c f out x)
     where
         r' : IndexedType (Either i o)
-        r' = choice r (Mu c r)
+        r' = union r (Mu c r)
         s' : IndexedType (Either i o)
-        s' = choice r (\o => Pair (s o) (interp (Fix c) r o))
+        s' = union r (\o => Pair (s o) (interp (Fix c) r o))
         %assert_total
         f : r' `arrow` s'
         f = split (idArrow {r = r}) (\ix => fanout (para {r = r} {s = s} c phi ix) id)
@@ -526,7 +537,7 @@ IsoList = Iso FList (\f, t => List (f t)) isoList
 
 mapList : {a : Type} -> {b : Type} -> (a -> b) -> (List a -> List b)
 mapList {a = a} {b = b} f =
-        imap {r = const a} {s = const b} IsoList (lift f) ()
+        imap {inputType = const a} {outputType = const b} IsoList (lift f) ()
 
 mapListExample : mapList succ [1, 2, 3] = [2, 3, 4]
 mapListExample = Refl
@@ -564,7 +575,7 @@ FRose = Fix RoseF
 
 fromRose : {r : IndexedType ()} -> {o : ()} -> Rose (r o) -> interp FRose r o
 fromRose {r = r} {o = ()} (Fork x xs) =
-        In (x, fromList (imap {r = Rose . r} {s = interp FRose r} IsoList f () xs))
+        In (x, fromList (imap {inputType = Rose . r} {outputType = interp FRose r} IsoList f () xs))
     where
         %assert_total
         f : (Rose . r) `arrow` interp FRose r
@@ -572,7 +583,7 @@ fromRose {r = r} {o = ()} (Fork x xs) =
 
 toRose : {r : IndexedType ()} -> {o : ()} -> interp FRose r o -> Rose (r o)
 toRose {r = r} {o = ()} (In (x, xs)) =
-        Fork x (imap {r = interp FRose r} {s = Rose . r} IsoList f () (toList xs))
+        Fork x (imap {inputType = interp FRose r} {outputType = Rose . r} IsoList f () (toList xs))
     where
         %assert_total
         f : interp FRose r `arrow` (Rose . r)
@@ -597,7 +608,7 @@ IsoRose : IxFun () ()
 IsoRose = Iso FRose (\f, t => Rose (f t)) isoRose
 
 mapRose : {a : Type} -> {b : Type} -> (a -> b) -> Rose a -> Rose b
-mapRose {a = a} {b = b} f = imap {r = const a} {s = const b} IsoRose (lift f) ()
+mapRose {a = a} {b = b} f = imap {inputType = const a} {outputType = const b} IsoRose (lift f) ()
 
 mapRoseExample : mapRose succ roseTree = Fork 2 [Fork 3 []]
 mapRoseExample = Refl
@@ -606,7 +617,7 @@ foldRose : {a : Type} -> {r : Type} -> (a -> List r -> r) -> Rose a -> r
 foldRose {a = a} {r = r} f xs = cata {r = const a} {s = const r}
         (baseFunctor (fromRose {r = const a} {o = ()} xs)) f' () (fromRose xs)
     where
-        f' : interp RoseF (choice (const a) (const r)) `arrow` const r
+        f' : interp RoseF (union (const a) (const r)) `arrow` const r
         f' () (x, y) = f x (toList y)
 
 sumRose : Rose Nat -> Nat
