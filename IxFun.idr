@@ -20,6 +20,8 @@ It might sound like a good idea to use implicit conversions instead, but that
 doesn't seem to work well in practice.
 -}
 
+
+
 IndexedType : Type -> Type
 IndexedType index = index -> Type
 
@@ -39,11 +41,13 @@ someIndexedType : IndexedType Bool
 someIndexedType False = Nat
 someIndexedType True = Nat -> Nat
 
+
+
 {-
 Here indexed types are typically built out of units, sums and products, e.g.
 `Either () ()' (in type theorists' lingo, "1 + 1") would be isomorphic to
 `Bool', its two inhabitants being `Left ()' and `Right ()'. Just to
-illustrate the stuff I've introduced so far:
+illustrate the stuff introduced so far:
 -}
 
 isoBoolTwo : Isomorphic Bool (Either () ())
@@ -66,6 +70,8 @@ isoBoolTwo = MkIso from to iso1 iso2
 Note this has little bearing on what's to follow, being just another random
 example.
 -}
+
+
 
 union : IndexedType firstIndex -> IndexedType secondIndex ->
         IndexedType (Either firstIndex secondIndex)
@@ -92,13 +98,15 @@ anotherIndexedTypeExample2 = Refl
 anotherIndexedTypeExample3 : anotherIndexedType (Right True) = (Nat -> Nat)
 anotherIndexedTypeExample3 = Refl
 
+
+
 arrow : {index : Type} -> IndexedType index -> IndexedType index -> Type
 arrow {index = index} ixTypeSrc ixTypeTgt =
         (inp : index) -> ixTypeSrc inp -> ixTypeTgt inp
 
 {-
-`arrow' produces the type or morphisms (generalized functions) between two
-indexed types using the same indices.
+`arrow' produces the type or "generalized functions" between two indexed
+types using the same indices.
 
 Such arrows are parametrized by a given index `inp', and when applied to it
 produce an orinary function between the two types yielded by the
@@ -127,6 +135,8 @@ Depending on which index we want to apply it to -- `True' or `False' --
 function from `Bool' to `()'.
 -}
 
+
+
 split : r `arrow` u -> s `arrow` v -> union r s `arrow` union u v
 split f _ (Left x) = f x
 split _ f (Right x) = f x
@@ -137,6 +147,8 @@ outputs from right inputs using the second arrow. Note that this is defined
 for our "arrows" rather than for ordinary functions.
 -}
 
+
+
 fanout : (a -> b) -> (a -> c) -> a -> (b, c)
 fanout f g x = (f x, g x)
 
@@ -145,6 +157,8 @@ Produces a pair resulting from application of both given functions to our
 input. Unlike `split', this is for ordinary functions rather than our arrows
 operating on indexed types.
 -}
+
+
 
 lift : {index : Type} -> (a -> b) ->
         arrow {index = index} (const a) (const b)
@@ -156,6 +170,8 @@ indexed types (that is, those that map to the same type regardless of the
 index).
 -}
 
+
+
 idArrow : {index : Type} -> {type : IndexedType index} -> type `arrow` type
 idArrow _ = id
 
@@ -163,12 +179,16 @@ idArrow _ = id
 The identity function lifted to indexed types.
 -}
 
+
+
 composeArrow : a `arrow` b -> b `arrow` c -> a `arrow` c
 composeArrow f g index = g index . f index
 
 {-
 We don't really need this, but the arrows compose nicely.
 -}
+
+
 
 IndexedFunctor : Type -> Type -> Type
 IndexedFunctor inputIndex outputIndex =
@@ -191,9 +211,11 @@ Can we implement a function like that? Well, sure...
 randomFunctor : IndexedFunctor () Bool
 randomFunctor ixType = const (ixType ())
 
+
+
 {-
 Now what in the seven hells does any of that have to do with algebraic data
-types, maps and folds?..
+types, maps and folds?.. Fasten your seat belts.
 -}
 
 mutual
@@ -236,16 +258,17 @@ framework.
     interp (Input inp) inputType _ = inputType inp
 
 {-
-Now we need an interpretation function that will build actual indexed
-functors from the provided codes. Much of this stuff is straightforward and
-unsurprising:
+The codes are useless on their own, so we need an interpretation function
+that will build actual indexed functors from the provided codes. Much of this
+stuff is straightforward and unsurprising:
 
 1. We have the basic building blocks in form of `Zero' and `One', which
    simply map everything to void and unit types correspondingly.
 
 2. Sum, product and composition are also as one would expect -- we can lift
    pairs of compatible indexed functors to functors that yield sums or
-   products of types, and we can compose indexed functors as well.
+   products of types, and we can compose indexed functors as well (as long as
+   the indices involved are compatible).
 
 3. `Iso' is a neat trick that will later allow us to obtain `imap' that works
    almost transparently for types that are isomorphic to those directly
@@ -290,6 +313,8 @@ There is a section with examples below, which should be able to shed further
 light on how all of this works.
 -}
 
+
+
 baseFunctor :
         {functor : IxFun (Either inputIndex outputIndex) outputIndex} ->
         Mu functor _ _ -> IxFun (Either inputIndex outputIndex) outputIndex
@@ -303,31 +328,31 @@ way in practice!), but it's also possible to pull it out of the `Mu'
 directly.
 -}
 
+
+
 imap : {inputIndex : Type} -> {outputIndex : Type} ->
-        {inputType : IndexedType inputIndex} -> {outputType : IndexedType inputIndex} ->
+        {r : IndexedType inputIndex} -> {s : IndexedType inputIndex} ->
         (functorRepr : IxFun inputIndex outputIndex) ->
-        inputType `arrow` outputType ->
-        interp functorRepr inputType `arrow` interp functorRepr outputType
+        r `arrow` s ->
+        interp functorRepr r `arrow` interp functorRepr s
 imap One _ _ () = ()
 imap (Sum g _) f out (Left x) = Left (imap g f out x)
 imap (Sum _ g) f out (Right x) = Right (imap g f out x)
 imap (Product g h) f out (x, y) = (imap g f out x, imap h f out y)
-imap {inputType = inputType} {outputType = outputType} (Composition g h) f out x =
-        imap {inputType = interp h inputType} {outputType = interp h outputType}
-                g (imap h f) out x
-imap {inputType = inputType} {outputType = outputType} (Iso repr host isomorphism) f out x =
+imap {r = r} {s = s} (Composition g h) f out x =
+        imap {r = interp h r} {s = interp h s} g (imap h f) out x
+imap {r = r} {s = s} (Iso repr host isomorphism) f out x =
         to iso2 (imap repr f out (from iso1 x))
     where
-        iso1 : Isomorphic (host inputType out) (interp repr inputType out)
-        iso1 = isomorphism inputType out
-        iso2 : Isomorphic (host outputType out) (interp repr outputType out)
-        iso2 = isomorphism outputType out
-imap {inputType = inputType} {outputType = outputType} (Fix g) f out (In x) =
-        In (imap {inputType = union inputType (Mu g inputType)}
-                {outputType = union outputType (Mu g outputType)} g f' out x)
+        iso1 : Isomorphic (host r out) (interp repr r out)
+        iso1 = isomorphism r out
+        iso2 : Isomorphic (host s out) (interp repr s out)
+        iso2 = isomorphism s out
+imap {r = r} {s = s} (Fix g) f out (In x) =
+        In (imap {r = union r (Mu g r)} {s = union s (Mu g s)} g f' out x)
     where
         %assert_total
-        f' : union inputType (Mu g inputType) `arrow` union outputType (Mu g outputType)
+        f' : union r (Mu g r) `arrow` union s (Mu g s)
         f' = split f (imap (Fix g) f)
 imap (Input inp) f _ x = f inp x
 
@@ -342,32 +367,36 @@ straightforward, and the biggest challenge here is getting the implicit
 parameters to recursive calls right. Unfortunately, unlike Agda used in the
 GPIF paper, Idris doesn't seem capable of doing that on it's own (or I just
 don't know how to cook it right).
+
+Note that `imap' is actually total, as we cannot build infinite data
+structures in this framework without subverting the totality checker.
+Unfortunately, I know of no easy way to demonstrate that to the checker, so I
+resorted to simply asserting totality.
 -}
+
+
 
 {-
 Catamorphisms are folds.
 -}
 
 cata : {inputIndex : Type} -> {outputIndex : Type} ->
-        {inputType : IndexedType inputIndex} ->
-        {outputType : IndexedType outputIndex} ->
+        {r : IndexedType inputIndex} -> {s : IndexedType outputIndex} ->
         (baseFunctorRepr : IxFun (Either inputIndex outputIndex) outputIndex) ->
-        interp baseFunctorRepr (union inputType outputType) `arrow` outputType ->
-        interp (Fix baseFunctorRepr) inputType `arrow` outputType
-cata {inputIndex = inputIndex} {outputIndex = outputIndex}
-        {inputType = inputType} {outputType = outputType}
-        baseFunctorRepr phi out (In x) =
-        phi out (imap {inputType = r'} {outputType = s'} baseFunctorRepr f out x)
+        interp baseFunctorRepr (union r s) `arrow` s ->
+        interp (Fix baseFunctorRepr) r `arrow` s
+cata {inputIndex = inputIndex} {outputIndex = outputIndex} {r = r} {s = s}
+        baseFunctorRepr algebra out (In x) =
+        algebra out (imap {r = r'} {s = s'} baseFunctorRepr f out x)
     where
         r' : IndexedType (Either inputIndex outputIndex)
-        r' = union inputType (Mu baseFunctorRepr inputType)
+        r' = union r (Mu baseFunctorRepr r)
         s' : IndexedType (Either inputIndex outputIndex)
-        s' = union inputType outputType
+        s' = union r s
         %assert_total
         f : r' `arrow` s'
-        f = split (idArrow {type = inputType})
-                (cata {inputType = inputType} {outputType = outputType}
-                baseFunctorRepr phi)
+        f = split (idArrow {type = r})
+                (cata {r = r} {s = s} baseFunctorRepr algebra)
 
 {-
 This is just a very general version of:
@@ -380,16 +409,20 @@ an algebra for the base functor of a recursive data type, we can lift it to
 collapse the recursive structure of data while performing some computations.
 
 The two explicit parameters are the representation of the base functor
-(needed to give the right type to the following parameters), and the algebra
-(phi), which in this case is the arrow with the freaky type.
+(needed to give the right type to the following parameters), and the algebra,
+which in this case is an arrow with the freaky type. (The point is still the
+same, though, -- it takes a functor with some of the parameters marked as
+"recursive holes", and produces a single value of the same indexed type.)
 
 `imap' is an important part of implementation, as it is used for a recursive
 call on all the recursive indices, while leaving the "input" indices
-untouched to feed the associated data directly to `phi'.
+untouched to feed the associated data directly to `algebra'.
 
-Unfortunately, I see no easy way to prove that this is total, despite the
-fact that it seems really obvious.
+Unfortunately, once again I see no easy way to prove that this is total,
+despite the fact that it seems really obvious.
 -}
+
+
 
 {-
 Anamorphisms are unfolds.
@@ -401,30 +434,29 @@ a principled fashion.
 
 partial
 ana : {inputIndex : Type} -> {outputIndex : Type} ->
-        {inputType : IndexedType inputIndex} ->
-        {outputType : IndexedType outputIndex} ->
+        {r : IndexedType inputIndex} -> {s : IndexedType outputIndex} ->
         (baseFunctorRepr : IxFun (Either inputIndex outputIndex) outputIndex) ->
-        outputType `arrow` interp baseFunctorRepr (union inputType outputType) ->
-        outputType `arrow` interp (Fix baseFunctorRepr) inputType
-ana {inputIndex = inputIndex} {outputIndex = outputIndex}
-        {inputType = inputType} {outputType = outputType}
-        baseFunctorRepr psy out x =
-        In (imap {inputType = r'} {outputType = s'} baseFunctorRepr f out (psy out x))
+        s `arrow` interp baseFunctorRepr (union r s) ->
+        s `arrow` interp (Fix baseFunctorRepr) r
+ana {inputIndex = inputIndex} {outputIndex = outputIndex} {r = r} {s = s}
+        baseFunctorRepr coalgebra out x =
+        In (imap {r = r'} {s = s'} baseFunctorRepr f out (coalgebra out x))
     where
         r' : IndexedType (Either inputIndex outputIndex)
-        r' = union inputType outputType
+        r' = union r s
         s' : IndexedType (Either inputIndex outputIndex)
-        s' = union inputType (Mu baseFunctorRepr inputType)
+        s' = union r (Mu baseFunctorRepr r)
         partial
         f : r' `arrow` s'
-        f = split (idArrow {type = inputType})
-                (ana {inputType = inputType} {outputType = outputType}
-                baseFunctorRepr psy)
+        f = split (idArrow {type = r})
+                (ana {r = r} {s = s} baseFunctorRepr coalgebra)
 
 {-
 Implementation-wise, this is the perfect dual to `cata' and is trivial to get
 right by reversing the arrows.
 -}
+
+
 
 {-
 Hylomorphisms are equivalent to a composition of an unfold with a fold. Since
@@ -437,7 +469,7 @@ hylo : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
         interp c (union r t) `arrow` t -> s `arrow` interp c (union r s) ->
         s `arrow` t
 hylo {i = i} {o = o} {r = r} {s = s} {t = t} c phi psy out x =
-        phi out (imap {inputType = r'} {outputType = s'} c f out (psy out x))
+        phi out (imap {r = r'} {s = s'} c f out (psy out x))
     where
         r' : IndexedType (Either i o)
         r' = union r s
@@ -462,7 +494,7 @@ para : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
         interp c (union r (\o => Pair (s o) (interp (Fix c) r o))) `arrow` s ->
         interp (Fix c) r `arrow` s
 para {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
-        phi out (imap {inputType = r'} {outputType = s'} c f out x)
+        phi out (imap {r = r'} {s = s'} c f out x)
     where
         r' : IndexedType (Either i o)
         r' = union r (Mu c r)
@@ -552,14 +584,14 @@ IsoList = Iso FList (\f, t => List (f t)) isoList
 
 mapList : {a : Type} -> {b : Type} -> (a -> b) -> (List a -> List b)
 mapList {a = a} {b = b} f =
-        imap {inputType = const a} {outputType = const b} IsoList (lift f) ()
+        imap {r = const a} {s = const b} IsoList (lift f) ()
 
 mapListExample : mapList succ [1, 2, 3] = [2, 3, 4]
 mapListExample = Refl
 
 foldList : {a : Type} -> {r : Type} -> (a -> r -> r) -> r -> List a -> r
 foldList {a = a} {r = r} c n xs =
-        cata {inputType = const a} {outputType = const r}
+        cata {r = const a} {s = const r}
                 (baseFunctor (fromList {r = const a} {o = ()} xs)) phi ()
                 (fromList xs)
     where
@@ -590,7 +622,7 @@ FRose = Fix RoseF
 
 fromRose : {r : IndexedType ()} -> {o : ()} -> Rose (r o) -> interp FRose r o
 fromRose {r = r} {o = ()} (Fork x xs) =
-        In (x, fromList (imap {inputType = Rose . r} {outputType = interp FRose r} IsoList f () xs))
+        In (x, fromList (imap {r = Rose . r} {s = interp FRose r} IsoList f () xs))
     where
         %assert_total
         f : (Rose . r) `arrow` interp FRose r
@@ -598,7 +630,7 @@ fromRose {r = r} {o = ()} (Fork x xs) =
 
 toRose : {r : IndexedType ()} -> {o : ()} -> interp FRose r o -> Rose (r o)
 toRose {r = r} {o = ()} (In (x, xs)) =
-        Fork x (imap {inputType = interp FRose r} {outputType = Rose . r} IsoList f () (toList xs))
+        Fork x (imap {r = interp FRose r} {s = Rose . r} IsoList f () (toList xs))
     where
         %assert_total
         f : interp FRose r `arrow` (Rose . r)
@@ -623,14 +655,14 @@ IsoRose : IxFun () ()
 IsoRose = Iso FRose (\f, t => Rose (f t)) isoRose
 
 mapRose : {a : Type} -> {b : Type} -> (a -> b) -> Rose a -> Rose b
-mapRose {a = a} {b = b} f = imap {inputType = const a} {outputType = const b} IsoRose (lift f) ()
+mapRose {a = a} {b = b} f = imap {r = const a} {s = const b} IsoRose (lift f) ()
 
 mapRoseExample : mapRose succ roseTree = Fork 2 [Fork 3 []]
 mapRoseExample = Refl
 
 foldRose : {a : Type} -> {r : Type} -> (a -> List r -> r) -> Rose a -> r
 foldRose {a = a} {r = r} f xs =
-        cata {inputType = const a} {outputType = const r}
+        cata {r = const a} {s = const r}
                 (baseFunctor (fromRose {r = const a} {o = ()} xs)) f' () (fromRose xs)
     where
         f' : interp RoseF (union (const a) (const r)) `arrow` const r
