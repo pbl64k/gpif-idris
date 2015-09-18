@@ -638,6 +638,81 @@ foldBoolExample2 = Refl
 
 
 {-
+Nats.
+-}
+
+{-
+Now let's try to do something with natural numbers.
+-}
+
+CodeNatsFunctor : IxFun (Either Void ()) ()
+CodeNatsFunctor = Sum One (Input (Right ()))
+
+{-
+I find it strangely funny that the base functor for nats is isomorphic to
+`Bool', but I can't really explain why.
+
+Of course, we could have coded `Maybe' as a "recursive" data type as with
+booleans above, but I think that it would have been too much of a good thing.
+-}
+
+CodeNats : IxFun Void ()
+CodeNats = Fix CodeNatsFunctor
+
+fromNats : Nat -> interp CodeNats r o
+fromNats Z = In (Left ())
+fromNats (S n) = In (Right (fromNats n))
+
+%assert_total
+toNats : interp CodeNats r o -> Nat
+toNats (In (Left ())) = Z
+toNats {o = ()} (In (Right n)) = S (toNats n)
+
+isoNats : (r : IndexedType Void) -> (o : ()) ->
+        Isomorphic Nat (interp CodeNats r o)
+isoNats r o =
+        MkIso
+            (fromNats {r = r} {o = o})
+            (toNats {r = r} {o = o})
+            (\_ => believe_me ())
+            (\_ => believe_me ())
+
+IsoNats : IxFun Void ()
+IsoNats = Iso CodeNats (\_, _ => Nat) isoNats
+
+{-
+And now, in the time-honored tradition of *The Evolution of a Haskell
+Programmer*, let's tackle the age old problem of implementing the factorial
+in the most perverse fashion possible.
+-}
+
+paraNats : a -> (a -> Nat -> a) -> Nat -> a
+paraNats zero suc n =
+        para {r = r'} {s = s'} CodeNatsFunctor algebra () (fromNats n)
+    where
+        r' : IndexedType Void
+        r' = const ()
+        s' : IndexedType ()
+        s' = const a
+        algebra : interp CodeNatsFunctor (Main.union r' (\o => Pair (s' o) (interp (Fix CodeNatsFunctor) r' o))) `arrow` s'
+        algebra = \() => either (const zero) (\(x, n') => suc x (succ (toNats n')))
+
+factorial : Nat -> Nat
+factorial = paraNats 1 (*)
+
+{-
+Whee!
+-}
+
+factorialExample1 : factorial 0 = 1
+factorialExample1 = Refl
+
+factorialExample2 : factorial 5 = 120
+factorialExample2 = Refl
+
+
+
+{-
 Cons-cell lists.
 -}
 
