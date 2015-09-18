@@ -485,7 +485,7 @@ hylo {inputIndex = inputIndex} {outputIndex = outputIndex}
                 (hylo {r = r} {s = s} {t = t} baseFunctorRepr algebra coalgebra)
 
 {-
-This is more efficient that composing `cata' and `ana', but otherwise
+This is more efficient than composing `ana' and `cata', but otherwise
 equivalent.
 -}
 
@@ -650,7 +650,7 @@ CodeNatsFunctor = Sum One (Input (Right ()))
 
 {-
 I find it strangely funny that the base functor for nats is isomorphic to
-`Bool', but I can't really explain why.
+`Maybe', but I can't really explain why.
 
 Of course, we could have coded `Maybe' as a "recursive" data type as with
 booleans above, but I think that it would have been too much of a good thing.
@@ -666,7 +666,17 @@ fromNats (S n) = In (Right (fromNats n))
 %assert_total
 toNats : interp CodeNats r o -> Nat
 toNats (In (Left ())) = Z
-toNats {o = ()} (In (Right n)) = S (toNats n)
+toNats {r = r} {o = ()} (In (Right n)) = S (toNats n) --(assert_smaller (In (Right n)) n))
+
+{-
+It should be trivial to prove totality here by using `assert_smaller' (for
+that matter, Idris really should be capable of recognizing that the argument
+to recursive call is strictly decreasing here!) -- but it isn't. All my
+attempts to do so ran into a wall of seriously cryptic error messages and
+weird phenomena such as the function apparently being accepted as total, but
+the factorial examples below starting to fail, apparently due to
+non-reduction in types.
+-}
 
 isoNats : (r : IndexedType Void) -> (o : ()) ->
         Isomorphic Nat (interp CodeNats r o)
@@ -716,25 +726,37 @@ factorialExample2 = Refl
 Cons-cell lists.
 -}
 
-ListF : IxFun (Either () ()) ()
-ListF = Sum One (Product (Input (Left ())) (Input (Right ())))
+{-
+Now let's do the lists. Everything should be fairly rote by now.
+-}
 
-FList : IxFun () ()
-FList = Fix ListF
+CodeListFunctor : IxFun (Either () ()) ()
+CodeListFunctor = Sum One (Product (Input (Left ())) (Input (Right ())))
 
-fromList : {r : IndexedType ()} -> {o : ()} -> List (r o) -> interp FList r o
+{-
+Unlike nats and booleans, lists are polymorphic, so we need two arguments --
+one to specify the type of the elements, and one to plug the base functor
+back into itself.
+-}
+
+CodeList : IxFun () ()
+CodeList = Fix CodeListFunctor
+
+fromList : {r : IndexedType ()} -> {o : ()} -> List (r o) -> interp CodeList r o
 fromList [] = In (Left ())
 fromList {o = ()} (x :: xs) = In (Right (x, fromList xs))
 
 %assert_total
-toList : {r : IndexedType ()} -> {o : ()} -> interp FList r o -> List (r o)
+toList : {r : IndexedType ()} -> {o : ()} -> interp CodeList r o -> List (r o)
 toList (In (Left ())) = []
 toList {o = ()} (In (Right (x, xs))) = x :: toList xs
--- Curiously, just adding xs0@ triggers a type mismatch. Fascinating.
---toList {o = ()} xs0@(In (Right (x, xs))) = x :: toList xs
+
+{-
+Same troubles as with `toNats' above here.
+-}
 
 isoList : (r : IndexedType ()) -> (o : ()) ->
-        Isomorphic (List (r o)) (interp FList r o)
+        Isomorphic (List (r o)) (interp CodeList r o)
 isoList r o =
         MkIso
             (fromList {r = r} {o = o})
@@ -742,8 +764,19 @@ isoList r o =
             (\_ => believe_me ())
             (\_ => believe_me ())
 
+{-
+I'm skipping the proof again, if you're curious, you can refer the GPIF,
+which does contain a surprisingly unwieldy proof.
+-}
+
 IsoList : IxFun () ()
-IsoList = Iso FList (\f, t => List (f t)) isoList
+IsoList = Iso CodeList (\f, t => List (f t)) isoList
+
+{-
+Having established the isomorphism between `List's and indexed functor
+represented by `CodeList', we can now instantiate concrete map and fold for
+lists.
+-}
 
 mapList : {a : Type} -> {b : Type} -> (a -> b) -> (List a -> List b)
 mapList {a = a} {b = b} f =
@@ -761,52 +794,81 @@ foldList {a = a} {r = r} c n xs =
         phi : () -> Either () (a, r) -> r
         phi = \_ => (either (const n) (uncurry c))
 
+{-
+At this point it's probably worth noting that this is less practical than
+aesthetically pleasing. While the concept is beautiful, the unnatural
+contortions that we need to go through to actually use generic catamorphisms
+make the idea unappealing in practice. 
+-}
+
 foldListExample : foldList (+) 0 [1, 2, 3] = 6
 foldListExample = Refl
 
 lengthList : List a -> Nat
 lengthList = foldList (const succ) 0
 
+lengthListExample : lengthList [1, 2, 1, 2, 1] = 5
+lengthListExample = Refl
+
 sumList : List Nat -> Nat
 sumList = foldList (+) 0
+
+sumListExample : sumList [1, 2, 3] = 6
+sumListExample = Refl
+
+
 
 {-
 Rose trees.
 -}
 
+{-
+As an encore, we can also do rose trees, which are interesting because the
+definition involves the composition with another indexed functor we've
+previousle defined.
+-}
+
 data Rose : (a : Type) -> Type where
     Fork : a -> List (Rose a) -> Rose a
 
-RoseF : IxFun (Either () ()) ()
-RoseF = Product (Input (Left ())) (Composition FList (Input (Right ())))
+CodeRoseFunctor : IxFun (Either () ()) ()
+CodeRoseFunctor = Product (Input (Left ())) (Composition CodeList (Input (Right ())))
 
-FRose : IxFun () ()
-FRose = Fix RoseF
+CodeRose : IxFun () ()
+CodeRose = Fix CodeRoseFunctor
 
-fromRose : {r : IndexedType ()} -> {o : ()} -> Rose (r o) -> interp FRose r o
+fromRose : {r : IndexedType ()} -> {o : ()} -> Rose (r o) -> interp CodeRose r o
 fromRose {r = r} {o = ()} (Fork x xs) =
-        In (x, fromList (imap {r = Rose . r} {s = interp FRose r} IsoList f () xs))
+        In (x, fromList (imap {r = Rose . r} {s = interp CodeRose r} IsoList f () xs))
     where
         %assert_total
-        f : (Rose . r) `arrow` interp FRose r
+        f : (Rose . r) `arrow` interp CodeRose r
         f () = fromRose
 
-toRose : {r : IndexedType ()} -> {o : ()} -> interp FRose r o -> Rose (r o)
+toRose : {r : IndexedType ()} -> {o : ()} -> interp CodeRose r o -> Rose (r o)
 toRose {r = r} {o = ()} (In (x, xs)) =
-        Fork x (imap {r = interp FRose r} {s = Rose . r} IsoList f () (toList xs))
+        Fork x (imap {r = interp CodeRose r} {s = Rose . r} IsoList f () (toList xs))
     where
         %assert_total
-        f : interp FRose r `arrow` (Rose . r)
+        f : interp CodeRose r `arrow` (Rose . r)
         f () = toRose
 
-roseTree : Rose Nat
-roseTree = (Fork 1 [Fork 2 []])
+someRoseTree : Rose Nat
+someRoseTree = Fork 1 [Fork 2 []]
 
-toFromRoseExample : toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} roseTree) = roseTree
-toFromRoseExample = Refl
+anotherRoseTree : Rose Nat
+anotherRoseTree = Fork 1 [Fork 2 [], Fork 3 [Fork 4 [], Fork 5 []]]
+
+toFromRoseExample1 :
+        toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} someRoseTree) = someRoseTree
+toFromRoseExample1 = Refl
+
+toFromRoseExample2 :
+        toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} anotherRoseTree) = anotherRoseTree
+toFromRoseExample2 = Refl
 
 isoRose : (r : IndexedType ()) -> (o : ()) ->
-        Isomorphic (Rose (r o)) (interp FRose r o)
+        Isomorphic (Rose (r o)) (interp CodeRose r o)
 isoRose r o =
         MkIso
             (fromRose {r = r} {o = o})
@@ -815,12 +877,18 @@ isoRose r o =
             (\_ => believe_me ())
 
 IsoRose : IxFun () ()
-IsoRose = Iso FRose (\f, t => Rose (f t)) isoRose
+IsoRose = Iso CodeRose (\f, t => Rose (f t)) isoRose
+
+{-
+With isomorphism "established," we can get to concrete maps and folds once
+again.
+-}
 
 mapRose : {a : Type} -> {b : Type} -> (a -> b) -> Rose a -> Rose b
-mapRose {a = a} {b = b} f = imap {r = const a} {s = const b} IsoRose (lift f) ()
+mapRose {a = a} {b = b} f =
+        imap {r = const a} {s = const b} IsoRose (lift f) ()
 
-mapRoseExample : mapRose succ roseTree = Fork 2 [Fork 3 []]
+mapRoseExample : mapRose succ someRoseTree = Fork 2 [Fork 3 []]
 mapRoseExample = Refl
 
 foldRose : {a : Type} -> {r : Type} -> (a -> List r -> r) -> Rose a -> r
@@ -828,12 +896,20 @@ foldRose {a = a} {r = r} f xs =
         cata {r = const a} {s = const r}
                 (baseFunctor (fromRose {r = const a} {o = ()} xs)) f' () (fromRose xs)
     where
-        f' : interp RoseF (union (const a) (const r)) `arrow` const r
+        f' : interp CodeRoseFunctor (union (const a) (const r)) `arrow` const r
         f' () (x, y) = f x (toList y)
+
+{-
+For some reason, the implementation in GPIF is much more involved, as far as
+I can tell -- unnecessarily so.
+-}
 
 sumRose : Rose Nat -> Nat
 sumRose = foldRose (\x, xs => x + sumList xs)
 
-sumRoseExample : sumRose roseTree = 3
-sumRoseExample = Refl
+sumRoseExample1 : sumRose someRoseTree = 3
+sumRoseExample1 = Refl
+
+sumRoseExample2 : sumRose anotherRoseTree = 15
+sumRoseExample2 = Refl
 
