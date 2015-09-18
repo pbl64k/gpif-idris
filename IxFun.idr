@@ -464,45 +464,55 @@ unfolds are involved, this is also partial.
 -}
 
 partial
-hylo : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
-        {t : IndexedType o} -> (c : IxFun (Either i o) o) ->
-        interp c (union r t) `arrow` t -> s `arrow` interp c (union r s) ->
+hylo : {inputIndex : Type} -> {outputIndex : Type} ->
+        {r : IndexedType inputIndex} -> {s : IndexedType outputIndex} ->
+        {t : IndexedType outputIndex} ->
+        (baseFunctorRepr : IxFun (Either inputIndex outputIndex) outputIndex) ->
+        interp baseFunctorRepr (union r t) `arrow` t ->
+        s `arrow` interp baseFunctorRepr (union r s) ->
         s `arrow` t
-hylo {i = i} {o = o} {r = r} {s = s} {t = t} c phi psy out x =
-        phi out (imap {r = r'} {s = s'} c f out (psy out x))
+hylo {inputIndex = inputIndex} {outputIndex = outputIndex}
+        {r = r} {s = s} {t = t} baseFunctorRepr algebra coalgebra out x =
+        algebra out (imap {r = r'} {s = s'} baseFunctorRepr f out (coalgebra out x))
     where
-        r' : IndexedType (Either i o)
+        r' : IndexedType (Either inputIndex outputIndex)
         r' = union r s
-        s' : IndexedType (Either i o)
+        s' : IndexedType (Either inputIndex outputIndex)
         s' = union r t
         partial
         f : r' `arrow` s'
-        f = split (idArrow {type = r}) (hylo {r = r} {s = s} {t = t} c phi psy)
+        f = split (idArrow {type = r})
+                (hylo {r = r} {s = s} {t = t} baseFunctorRepr algebra coalgebra)
 
 {-
 This is more efficient that composing `cata' and `ana', but otherwise
 equivalent.
 -}
 
+
+
 {-
 Paramorphisms are generalized folds, commonly described as "using their value
 and keeping it too."
 -}
 
-para : {i : Type} -> {o : Type} -> {r : IndexedType i} -> {s : IndexedType o} ->
-        (c : IxFun (Either i o) o) ->
-        interp c (union r (\o => Pair (s o) (interp (Fix c) r o))) `arrow` s ->
-        interp (Fix c) r `arrow` s
-para {i = i} {o = o} {r = r} {s = s} c phi out (In x) =
-        phi out (imap {r = r'} {s = s'} c f out x)
+para : {inputIndex : Type} -> {outputIndex : Type} ->
+        {r : IndexedType inputIndex} -> {s : IndexedType outputIndex} ->
+        (baseFunctorRepr : IxFun (Either inputIndex outputIndex) outputIndex) ->
+        interp baseFunctorRepr (union r (\o => Pair (s o) (interp (Fix baseFunctorRepr) r o))) `arrow` s ->
+        interp (Fix baseFunctorRepr) r `arrow` s
+para {inputIndex = inputIndex} {outputIndex = outputIndex} {r = r} {s = s}
+        baseFunctorRepr algebra out (In x) =
+        algebra out (imap {r = r'} {s = s'} baseFunctorRepr f out x)
     where
-        r' : IndexedType (Either i o)
-        r' = union r (Mu c r)
-        s' : IndexedType (Either i o)
-        s' = union r (\o => Pair (s o) (interp (Fix c) r o))
+        r' : IndexedType (Either inputIndex outputIndex)
+        r' = union r (Mu baseFunctorRepr r)
+        s' : IndexedType (Either inputIndex outputIndex)
+        s' = union r (\o => Pair (s o) (interp (Fix baseFunctorRepr) r o))
         %assert_total
         f : r' `arrow` s'
-        f = split (idArrow {type = r}) (\ix => fanout (para {r = r} {s = s} c phi ix) id)
+        f = split (idArrow {type = r})
+                (\ix => fanout (para {r = r} {s = s} baseFunctorRepr algebra ix) id)
 
 {-
 Metamorphisms and apomorphisms are left as an exercise for the reader. Since
@@ -510,22 +520,31 @@ they're dual to hylomorphisms and paramorphisms correspondingly, the
 derivation should be "easy." (Cf. `cata' and `ana'.)
 -}
 
+
+
 {-
 Well, and now let's try to take off with all that stuff...
 -}
+
+
 
 {-
 Booleans.
 -}
 
-BoolF : IxFun Void ()
-BoolF = Sum One One
+CodeBool : IxFun Void ()
+CodeBool = Sum One One
 
-fromBool : Bool -> interp BoolF r o
+{-
+Bool takes no parameters (which is why the input index is `Void') and is
+isomorphic to the sum of two unit types, as I mentioned before.
+-}
+
+fromBool : Bool -> interp CodeBool r o
 fromBool False = Left ()
 fromBool True = Right ()
 
-toBool : interp BoolF r o -> Bool
+toBool : interp CodeBool r o -> Bool
 toBool (Left ()) = False
 toBool (Right ()) = True
 
@@ -533,12 +552,12 @@ isoBool1 : (b : Bool) -> toBool (fromBool b) = b
 isoBool1 False = Refl
 isoBool1 True = Refl
 
-isoBool2 : (b : interp BoolF r o) -> fromBool (toBool b) = b
+isoBool2 : (b : interp CodeBool r o) -> fromBool (toBool b) = b
 isoBool2 (Left ()) = Refl
 isoBool2 (Right ()) = Refl
 
 isoBool : (r : IndexedType Void) -> (o : ()) ->
-        Isomorphic Bool (interp BoolF r o)
+        Isomorphic Bool (interp CodeBool r o)
 isoBool r o =
         MkIso
             (fromBool {r = r} {o = o})
@@ -547,7 +566,76 @@ isoBool r o =
             (isoBool2 {r = r} {o = o})
 
 IsoBool : IxFun Void ()
-IsoBool = Iso BoolF (\_, _ => Bool) isoBool
+IsoBool = Iso CodeBool (\_, _ => Bool) isoBool
+
+{-
+...but all of that is fairly uninspiring. Can we do something more
+interesting?
+
+Well, we can treat `Bool' as a recursive type. Wait, what?
+-}
+
+CodeRecBoolFunctor : IxFun (Either Void ()) ()
+CodeRecBoolFunctor = Sum One One
+
+CodeRecBool : IxFun Void ()
+CodeRecBool = Fix CodeRecBoolFunctor
+
+{-
+Bwahaha!
+-}
+
+fromRecBool : Bool -> interp CodeRecBool r o
+fromRecBool False = In (Left ())
+fromRecBool True = In (Right ())
+
+toRecBool : interp CodeRecBool r o -> Bool
+toRecBool (In (Left ())) = False
+toRecBool (In (Right ())) = True
+
+isoRecBool : (r : IndexedType Void) -> (o : ()) ->
+        Isomorphic Bool (interp CodeRecBool r o)
+isoRecBool r o =
+        MkIso
+            (fromRecBool {r = r} {o = o})
+            (toRecBool {r = r} {o = o})
+            (\_ => believe_me ())
+            (\_ => believe_me ())
+
+{-
+I'm omitting the isomorphism proof, because, seriously, it's the same as for
+the sane `Bool' above.
+-}
+
+IsoRecBool : IxFun Void ()
+IsoRecBool = Iso CodeRecBool (\_, _ => Bool) isoRecBool
+
+{-
+And now we can use `cata'... on `Bool'!
+-}
+
+foldBool : {a : Type} -> Bool -> Lazy a -> Lazy a -> a
+foldBool cond xThen xElse = cata {r = const ()} {s = const a}
+        CodeRecBoolFunctor algebra () (fromRecBool cond)
+    where
+        algebra : interp CodeRecBoolFunctor (union (const ()) (const a)) `arrow` const a
+        algebra = \_ => either (const xElse) (const xThen)
+
+{-
+Now why would we do something like that? The only answer I have to this
+question is, "Because we can!"
+
+Other than that, it's just a *really* perverse way to pattern match on
+`Bool'.
+-}
+
+foldBoolExample1 : foldBool True 1 2 = 1
+foldBoolExample1 = Refl
+
+foldBoolExample2 : foldBool False 1 2 = 2
+foldBoolExample2 = Refl
+
+
 
 {-
 Cons-cell lists.
