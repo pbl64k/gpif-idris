@@ -22,7 +22,7 @@ doesn't seem to work well in practice.
 
 
 
-IndexedType : Type -> Type
+IndexedType : (index : Type) -> Type
 IndexedType index = index -> Type
 
 {-
@@ -56,12 +56,15 @@ isoBoolTwo = MkIso from to iso1 iso2
         from : Bool -> Either () ()
         from False = Left ()
         from True = Right ()
+
         to : Either () () -> Bool
         to (Left ()) = False
         to (Right ()) = True
+
         iso1 : (x : Bool) -> to (from x) = x
         iso1 False = Refl
         iso1 True = Refl
+
         iso2 : (x : Either () ()) -> from (to x) = x
         iso2 (Left ()) = Refl
         iso2 (Right ()) = Refl
@@ -145,17 +148,6 @@ split _ f (Right x) = f x
 Produces left outputs from left inputs using the first arrow, and right
 outputs from right inputs using the second arrow. Note that this is defined
 for our "arrows" rather than for ordinary functions.
--}
-
-
-
-fanout : (a -> b) -> (a -> c) -> a -> (b, c)
-fanout f g x = (f x, g x)
-
-{-
-Produces a pair resulting from application of both given functions to our
-input. Unlike `split', this is for ordinary functions rather than our arrows
-operating on indexed types.
 -}
 
 
@@ -391,8 +383,10 @@ cata {inputIndex = inputIndex} {outputIndex = outputIndex} {r = r} {s = s}
     where
         r' : IndexedType (Either inputIndex outputIndex)
         r' = union r (Mu baseFunctorRepr r)
+
         s' : IndexedType (Either inputIndex outputIndex)
         s' = union r s
+
         %assert_total
         f : r' `arrow` s'
         f = split (idArrow {type = r})
@@ -444,8 +438,10 @@ ana {inputIndex = inputIndex} {outputIndex = outputIndex} {r = r} {s = s}
     where
         r' : IndexedType (Either inputIndex outputIndex)
         r' = union r s
+
         s' : IndexedType (Either inputIndex outputIndex)
         s' = union r (Mu baseFunctorRepr r)
+
         partial
         f : r' `arrow` s'
         f = split (idArrow {type = r})
@@ -477,8 +473,10 @@ hylo {inputIndex = inputIndex} {outputIndex = outputIndex}
     where
         r' : IndexedType (Either inputIndex outputIndex)
         r' = union r s
+
         s' : IndexedType (Either inputIndex outputIndex)
         s' = union r t
+
         partial
         f : r' `arrow` s'
         f = split (idArrow {type = r})
@@ -507,8 +505,15 @@ para {inputIndex = inputIndex} {outputIndex = outputIndex} {r = r} {s = s}
     where
         r' : IndexedType (Either inputIndex outputIndex)
         r' = union r (Mu baseFunctorRepr r)
+
         s' : IndexedType (Either inputIndex outputIndex)
         s' = union r (\o => Pair (s o) (interp (Fix baseFunctorRepr) r o))
+
+        fanout : (a -> b) -> (a -> c) -> a -> (b, c)
+        -- curious behavior results if we attempt to use `f` as a parameter
+        -- name, as it appears to clash with `f' below
+        fanout g h x = (g x, h x)
+
         %assert_total
         f : r' `arrow` s'
         f = split (idArrow {type = r})
@@ -765,7 +770,7 @@ isoList r o =
             (\_ => believe_me ())
 
 {-
-I'm skipping the proof again, if you're curious, you can refer the GPIF,
+I'm skipping the proof again, if you're curious, you can refer to GPIF,
 which does contain a surprisingly unwieldy proof.
 -}
 
@@ -816,6 +821,10 @@ sumList = foldList (+) 0
 sumListExample : sumList [1, 2, 3] = 6
 sumListExample = Refl
 
+{-
+But oh well, at the least we can one-up the `factorial' above.
+-}
+
 
 
 {-
@@ -825,7 +834,7 @@ Rose trees.
 {-
 As an encore, we can also do rose trees, which are interesting because the
 definition involves the composition with another indexed functor we've
-previousle defined.
+previously defined.
 -}
 
 data Rose : (a : Type) -> Type where
@@ -838,6 +847,8 @@ CodeRoseFunctor = Product (Input (Left ())) (Composition IsoList (Input (Right (
 GPIF seems to favour using the equivalent of `CodeList' here for some reason,
 but `IsoList' is a first class citizen in the universe, and using it directly
 makes everything a little bit easier.
+
+Note that `Input' effectively discards the output index.
 -}
 
 CodeRose : IxFun () ()
@@ -866,11 +877,13 @@ anotherRoseTree : Rose Nat
 anotherRoseTree = Fork 1 [Fork 2 [], Fork 3 [Fork 4 [], Fork 5 []]]
 
 toFromRoseExample1 :
-        toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} someRoseTree) = someRoseTree
+        toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} someRoseTree) =
+        someRoseTree
 toFromRoseExample1 = Refl
 
 toFromRoseExample2 :
-        toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} anotherRoseTree) = anotherRoseTree
+        toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} anotherRoseTree) =
+        anotherRoseTree
 toFromRoseExample2 = Refl
 
 isoRose : (r : IndexedType ()) -> (o : ()) ->
