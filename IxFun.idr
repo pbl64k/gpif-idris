@@ -832,14 +832,20 @@ data Rose : (a : Type) -> Type where
     Fork : a -> List (Rose a) -> Rose a
 
 CodeRoseFunctor : IxFun (Either () ()) ()
-CodeRoseFunctor = Product (Input (Left ())) (Composition CodeList (Input (Right ())))
+CodeRoseFunctor = Product (Input (Left ())) (Composition IsoList (Input (Right ())))
+
+{-
+GPIF seems to favour using the equivalent of `CodeList' here for some reason,
+but `IsoList' is a first class citizen in the universe, and using it directly
+makes everything a little bit easier.
+-}
 
 CodeRose : IxFun () ()
 CodeRose = Fix CodeRoseFunctor
 
 fromRose : {r : IndexedType ()} -> {o : ()} -> Rose (r o) -> interp CodeRose r o
 fromRose {r = r} {o = ()} (Fork x xs) =
-        In (x, fromList (imap {r = Rose . r} {s = interp CodeRose r} IsoList f () xs))
+        In (x, imap {r = Rose . r} {s = interp CodeRose r} IsoList f () xs)
     where
         %assert_total
         f : (Rose . r) `arrow` interp CodeRose r
@@ -847,7 +853,7 @@ fromRose {r = r} {o = ()} (Fork x xs) =
 
 toRose : {r : IndexedType ()} -> {o : ()} -> interp CodeRose r o -> Rose (r o)
 toRose {r = r} {o = ()} (In (x, xs)) =
-        Fork x (imap {r = interp CodeRose r} {s = Rose . r} IsoList f () (toList xs))
+        Fork x (imap {r = interp CodeRose r} {s = Rose . r} IsoList f () xs)
     where
         %assert_total
         f : interp CodeRose r `arrow` (Rose . r)
@@ -897,11 +903,12 @@ foldRose {a = a} {r = r} f xs =
                 (baseFunctor (fromRose {r = const a} {o = ()} xs)) f' () (fromRose xs)
     where
         f' : interp CodeRoseFunctor (union (const a) (const r)) `arrow` const r
-        f' () (x, y) = f x (toList y)
+        f' () (x, y) = f x y
 
 {-
 For some reason, the implementation in GPIF is much more involved, as far as
-I can tell -- unnecessarily so.
+I can tell -- unnecessarily so (even accounting for the use of `CodeList'
+instead).
 -}
 
 sumRose : Rose Nat -> Nat
