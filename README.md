@@ -7,16 +7,21 @@ state of the art (though the practicality of this particular approach is
 somewhat debatable). Reading the paper was somewhat enlightening, but I
 wanted to develop a better grasp of how all of this works. As I also wanted
 to tinker with Idris, I thought that translating the companion code would be
-an excellent project to achieve both goal. (And that's exactly how it turned
+an excellent project to achieve both goals. (And that's exactly how it worked
 out for me.)
 
 While the implementation is probably of little practical interest, I wanted
 to share my insights. To that end, the code is commented quite extensively.
+(This is not a `.lidr`, though, as I am a little averse to all the
+greater-than signs.)
 
 This is only a partial translation, covering the material roughly up to and
 including 2.6. The sketchy even-odd list example at the very end is similar
 in design and purpose to the AST example in 2.7, but it is substantially
-simpler.
+simpler. The rose tree example in *GPIF* seemed overcomplicated to me without
+offering any advantages, so I used a simpler version both for the definition
+and for concrete instantiations of map and fold. I also included a recursive
+definition of booleans just for laughs.
 
 I may eventually translate the material up to the end of section 2, and, with
 somewhat lower likelihood, section 3, but I have no desire to tackle sections
