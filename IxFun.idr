@@ -798,15 +798,17 @@ foldList {a = a} {r = r} c n xs =
                 (baseFunctor (fromList {r = const a} {o = ()} xs)) algebra ()
                 (fromList xs)
     where
-        -- TODO
-        algebra : () -> Either () (a, r) -> r
-        algebra = \_ => (either (const n) (uncurry c))
+        algebra : interp (baseFunctor (fromList {r = const a} {o = ()} xs)) (union (const a) (const r)) `arrow` const r
+        algebra = \_ => either (const n) (uncurry c)
 
 {-
 At this point it's probably worth noting that this is less practical than
 aesthetically pleasing. While the concept is beautiful, the unnatural
 contortions that we need to go through to actually use generic catamorphisms
-make the idea unappealing in practice. 
+make the idea unappealing in practice.
+
+(I did complicate things unnecessarily by refusing to refer to the base
+functor directly. But still.)
 -}
 
 foldListExample : foldList (+) 0 [1, 2, 3] = 6
@@ -860,8 +862,9 @@ hyloFactorial n = hyloList coalg (*) n 1
 {-
 Mwahahah!
 
-Since `hylo' is partial, examples cannot be used to show that this actually
-behaves as expected, but you go ahead and try `hyloFactorial 5' in REPL.
+Since `hyloList' is partial, examples cannot be used to show that this
+actually behaves as expected, but you go ahead and try `hyloFactorial 5' in
+REPL.
 -}
 
 
