@@ -229,6 +229,13 @@ mutual
                 IxFun inputIndex outputIndex
         Fix : IxFun (Either inputIndex outputIndex) outputIndex -> IxFun inputIndex outputIndex
         Input : inputIndex -> IxFun inputIndex outputIndex
+        Output : outputIndex -> IxFun inputIndex outputIndex
+        Reindex : {inputIndex' : Type} -> {outputIndex' : Type} ->
+                IxFun inputIndex' outputIndex' ->
+                (inputIndex' -> inputIndex) -> (outputIndex -> outputIndex') ->
+                IxFun inputIndex outputIndex
+        Sigma : (c : IxFun Void ()) -> (interp c (\_ => ()) () -> IxFun inputIndex outputIndex) ->
+                IxFun inputIndex outputIndex
     
 {-
 First, we build an encoding using the universe pattern. We cannot pattern
@@ -248,6 +255,9 @@ framework.
     interp (Iso _ hostFunctor _) inputType out = hostFunctor inputType out
     interp (Fix functor) inputType out = Mu functor inputType out
     interp (Input inp) inputType _ = inputType inp
+    interp (Output out') _ out = out = out'
+    interp (Reindex f g h) inputType out = interp f (inputType . g) (h out)
+    interp (Sigma c f) inputType out = Exists (\inp => interp (f inp) inputType out)
 
 {-
 The codes are useless on their own, so we need an interpretation function
@@ -347,6 +357,14 @@ imap {r = r} {s = s} (Fix g) f out (In x) =
         f' : union r (Mu g r) `arrow` union s (Mu g s)
         f' = split f (imap (Fix g) f)
 imap (Input inp) f _ x = f inp x
+imap (Output _) _ _ x = x
+imap {r = r} {s = s} (Reindex {inputIndex' = inputIndex'} {outputIndex' = outputIndex'} g h i) f out x = --?what
+        imap {inputIndex = inputIndex'} {outputIndex = outputIndex'} {r = r . h} {s = s . h} g f' (i out) x
+    where
+        f' : arrow {index = inputIndex'} (r . h) (s . h)
+        -- For some cryptic reason, `(f . h)' doesn't work.
+        f' inp x = f (h inp) x
+imap (Sigma c g) f out (Evidence x pf) = Evidence x (imap (g x) f out pf)
 
 {-
 This is arguably the piece de resistance here. `imap' generalizes ordinary
