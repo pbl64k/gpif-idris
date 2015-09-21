@@ -707,8 +707,10 @@ paraNats zero suc n =
     where
         r' : IndexedType Void
         r' = const ()
+
         s' : IndexedType ()
         s' = const a
+
         algebra : interp CodeNatsFunctor (Main.union r' (\o => Pair (s' o) (interp (Fix CodeNatsFunctor) r' o))) `arrow` s'
         algebra = \() => either (const zero) (\(x, n') => suc x (succ (toNats n')))
 
@@ -793,11 +795,12 @@ mapListExample = Refl
 foldList : {a : Type} -> {r : Type} -> (a -> r -> r) -> r -> List a -> r
 foldList {a = a} {r = r} c n xs =
         cata {r = const a} {s = const r}
-                (baseFunctor (fromList {r = const a} {o = ()} xs)) phi ()
+                (baseFunctor (fromList {r = const a} {o = ()} xs)) algebra ()
                 (fromList xs)
     where
-        phi : () -> Either () (a, r) -> r
-        phi = \_ => (either (const n) (uncurry c))
+        -- TODO
+        algebra : () -> Either () (a, r) -> r
+        algebra = \_ => (either (const n) (uncurry c))
 
 {-
 At this point it's probably worth noting that this is less practical than
@@ -823,6 +826,42 @@ sumListExample = Refl
 
 {-
 But oh well, at the least we can one-up the `factorial' above.
+-}
+
+partial
+hyloList : {a : Type} -> {b : Type} -> {c : Type} ->
+        (a -> Either () (b, a)) -> (b -> c -> c) -> a -> c -> c
+hyloList {a = a} {b = b} {c = c} coalgebra algebra seed zero =
+        hylo {r = r'} {s = s'} {t = t'} CodeListFunctor algebra' coalgebra' () seed
+    where
+        r' : IndexedType ()
+        r' = const b
+
+        s' : IndexedType ()
+        s' = const a
+
+        t' : IndexedType ()
+        t' = const c
+
+        algebra' : interp CodeListFunctor (union r' t') `arrow` t'
+        algebra' () = either (const zero) (uncurry algebra)
+
+        coalgebra' : s' `arrow` interp CodeListFunctor (union r' s')
+        coalgebra' () = coalgebra
+
+%assert_total
+hyloFactorial : Nat -> Nat
+hyloFactorial n = hyloList coalg (*) n 1
+    where
+        coalg : Nat -> Either () (Nat, Nat)
+        coalg Z = Left ()
+        coalg (S n) = Right (S n, n)
+
+{-
+Mwahahah!
+
+Since `hylo' is partial, examples cannot be used to show that this actually
+behaves as expected, but you go ahead and try `hyloFactorial 5' in REPL.
 -}
 
 
@@ -913,10 +952,10 @@ mapRoseExample = Refl
 foldRose : {a : Type} -> {r : Type} -> (a -> List r -> r) -> Rose a -> r
 foldRose {a = a} {r = r} f xs =
         cata {r = const a} {s = const r}
-                (baseFunctor (fromRose {r = const a} {o = ()} xs)) f' () (fromRose xs)
+                (baseFunctor (fromRose {r = const a} {o = ()} xs)) algebra () (fromRose xs)
     where
-        f' : interp CodeRoseFunctor (union (const a) (const r)) `arrow` const r
-        f' () (x, y) = f x y
+        algebra : interp CodeRoseFunctor (union (const a) (const r)) `arrow` const r
+        algebra () (x, y) = f x y
 
 {-
 For some reason, the implementation in GPIF is much more involved, as far as
