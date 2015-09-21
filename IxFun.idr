@@ -795,7 +795,7 @@ which does contain a surprisingly unwieldy proof.
 -}
 
 IsoList : IxFun () ()
-IsoList = Iso CodeList (\f, t => List (f t)) isoList
+IsoList = Iso CodeList (\r, o => List (r o)) isoList
 
 {-
 Having established the isomorphism between `List's and indexed functor
@@ -956,7 +956,7 @@ isoRose r o =
             (\_ => believe_me ())
 
 IsoRose : IxFun () ()
-IsoRose = Iso CodeRose (\f, t => Rose (f t)) isoRose
+IsoRose = Iso CodeRose (\r, o => Rose (r o)) isoRose
 
 {-
 With isomorphism "established," we can get to concrete maps and folds once
@@ -992,4 +992,78 @@ sumRoseExample1 = Refl
 
 sumRoseExample2 : sumRose anotherRoseTree = 15
 sumRoseExample2 = Refl
+
+
+
+{- Even-odd lists. -}
+
+{-
+Just for funsies, here's a family of two mutually recursive datatypes
+parametrized by two types (of elements, in this case).
+-}
+
+mutual
+    data Even : (a : Type) -> (b : Type) -> Type where
+        ENil : Even a b
+        ECons : a -> Odd a b -> Even a b
+
+    data Odd : (a : Type) -> (b : Type) -> Type where
+        OCons : b -> Even a b -> Odd a b
+
+CodeEoFunctor : IxFun (Either (Either () ()) (Either () ())) (Either () ())
+CodeEoFunctor = Sum
+        (Product (Output (Left ())) (Sum One (Product (Input (Left (Left ()))) (Input (Right (Right ()))))))
+        (Product (Output (Right ())) (Product (Input (Left (Right ()))) (Input (Right (Left ())))))
+
+CodeEo : IxFun (Either () ()) (Either () ())
+CodeEo = Fix CodeEoFunctor
+
+mutual
+    %assert_total
+    fromEven : {r : IndexedType (Either () ())} -> Even (r (Left ())) (r (Right ())) -> interp CodeEo r (Left ())
+    fromEven ENil = In (Left (Refl, Left ()))
+    fromEven (ECons x xs) = In (Left (Refl, Right (x, fromOdd xs)))
+    
+    fromOdd : {r : IndexedType (Either () ())} -> Odd (r (Left ())) (r (Right ())) -> interp CodeEo r (Right ())
+    fromOdd (OCons x xs) = In (Right (Refl, (x, fromEven xs)))
+
+mutual
+    %assert_total
+    toEven : {r : IndexedType (Either () ())} -> interp CodeEo r (Left ()) -> Even (r (Left ())) (r (Right ()))
+    toEven (In (Left (_, Left ()))) = ENil
+    toEven (In (Left (_, Right (x, xs)))) = ECons x (toOdd xs)
+
+    %assert_total
+    toOdd : {r : IndexedType (Either () ())} -> interp CodeEo r (Right ()) -> Odd (r (Left ())) (r (Right ()))
+    toOdd (In (Right (_, (x, xs)))) = OCons x (toEven xs)
+
+someEo : Even Nat Char
+someEo = ECons 1 (OCons 'a' (ECons 2 (OCons 'b' ENil)))
+
+toFromEoExample : toEven (fromEven {r = either (const Nat) (const Char)} someEo) = someEo
+toFromEoExample = Refl
+
+isoEo : (r : IndexedType (Either () ())) -> (o : Either () ()) ->
+        Isomorphic (either (const Even) (const Odd) o (r (Left ())) (r (Right ()))) (interp CodeEo r o)
+isoEo r (Left ()) =
+        MkIso
+            (fromEven {r = r})
+            (toEven {r = r})
+            (\_ => believe_me ())
+            (\_ => believe_me ())
+isoEo r (Right ()) =
+        MkIso
+            (fromOdd {r = r})
+            (toOdd {r = r})
+            (\_ => believe_me ())
+            (\_ => believe_me ())
+
+IsoEo : IxFun (Either () ()) (Either () ())
+IsoEo = Iso CodeEo (\r, o => either (const Even) (const Odd) o (r (Left ())) (r (Right ()))) isoEo
+
+{-
+Having established the isomorphism between `Even'/`Odd' and our indexed
+functor, I leave implementing concrete map, folds etc. for this data type as
+an exercise for the reader.
+-}
 
