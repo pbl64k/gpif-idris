@@ -173,8 +173,8 @@ The identity function lifted to indexed types.
 
 
 
-composeArrow : a `arrow` b -> b `arrow` c -> a `arrow` c
-composeArrow f g index = g index . f index
+composeArrow : b `arrow` c -> a `arrow` b -> a `arrow` c
+composeArrow f g index = f index . g index
 
 {-
 We don't really need this, but the arrows compose nicely.
@@ -280,7 +280,7 @@ stuff is straightforward and unsurprising:
 4. `Fix' employs `Mu' below, which is similar to the definition of `Mu' that
    allows us to obtain recursive data structures from functors in other
    settings. This is the key piece, and it sheds a lot of light onto what's
-   going here with the whole indexed functors thing.
+   going on here with the whole indexed functors thing.
 -}
 
     data Mu : (baseFunctorRepr : IxFun (Either inputIndex outputIndex) outputIndex) ->
@@ -293,7 +293,7 @@ Recall a straightforward `Mu' which takes a functor (in Haskell sense of the
 word) and produces a recursive data type without any parameters. This can be
 generalized to `Mu2' which takes a bifunctor and produces a recursive data
 type with one parameter (which also happens to be a "functor"). In both
-cases, one of the parameters of the base functor is used to plug the functor
+cases, one of the parameters to the base functor is used to plug the functor
 back into itself. There's no simple way to generalize this to arbitrary
 arities without having a sufficiently powerful type system. But the power of
 dependent types is enough to do precisely that!
@@ -424,7 +424,8 @@ The two explicit parameters are the representation of the base functor
 (needed to give the right type to the following parameters), and the algebra,
 which in this case is an arrow with the freaky type. (The point is still the
 same, though, -- it takes a functor with some of the parameters marked as
-"recursive holes", and produces a single value of the same indexed type.)
+"recursive holes", and produces a value of the appropriate type for every
+"recursive" index involved.)
 
 `imap' is an important part of implementation, as it is used for a recursive
 call on all the recursive indices, while leaving the "input" indices
@@ -466,8 +467,8 @@ ana {inputIndex = inputIndex} {outputIndex = outputIndex} {r = r} {s = s}
                 (ana {r = r} {s = s} baseFunctorRepr coalgebra)
 
 {-
-Implementation-wise, this is the perfect dual to `cata' and is trivial to get
-right by reversing the arrows.
+Implementation-wise, this is the perfect dual to `cata' and thus it is
+trivial to get right by reversing the arrows.
 -}
 
 
@@ -642,7 +643,7 @@ foldBool cond xThen xElse = cata {r = const ()} {s = const a}
         CodeRecBoolFunctor algebra () (fromRecBool cond)
     where
         algebra : interp CodeRecBoolFunctor (union (const ()) (const a)) `arrow` const a
-        algebra = \_ => either (const xElse) (const xThen)
+        algebra _ = either (const xElse) (const xThen)
 
 {-
 Now why would we do something like that? The only answer I have to this
@@ -730,7 +731,7 @@ paraNats zero suc n =
         s' = const a
 
         algebra : interp CodeNatsFunctor (Main.union r' (\o => Pair (s' o) (interp (Fix CodeNatsFunctor) r' o))) `arrow` s'
-        algebra = \() => either (const zero) (\(x, n') => suc x (succ (toNats n')))
+        algebra _ = either (const zero) (\(x, n') => suc x (succ (toNats n')))
 
 factorial : Nat -> Nat
 factorial = paraNats 1 (*)
@@ -795,7 +796,7 @@ which does contain a surprisingly unwieldy proof.
 -}
 
 IsoList : IxFun () ()
-IsoList = Iso CodeList (\r, o => List (r o)) isoList
+IsoList = Iso CodeList (List .) isoList
 
 {-
 Having established the isomorphism between `List's and indexed functor
@@ -817,13 +818,18 @@ foldList {a = a} {r = r} c n xs =
                 (fromList xs)
     where
         algebra : interp (baseFunctor (fromList {r = const a} {o = ()} xs)) (union (const a) (const r)) `arrow` const r
-        algebra = \_ => either (const n) (uncurry c)
+        algebra _ = either (const n) (uncurry c)
 
 {-
 At this point it's probably worth noting that this is less practical than
 aesthetically pleasing. While the concept is beautiful, the unnatural
 contortions that we need to go through to actually use generic catamorphisms
 make the idea unappealing in practice.
+
+It is particularly annoying that we have to invoke `fromList' explicitly, and
+that we do not have automatic mapping of algebras to appropriate non-indexed
+types. Both problems should be solvable, but the solutions probably are not
+entirely trivial.
 
 (I did complicate things unnecessarily by refusing to refer to the base
 functor directly. But still.)
@@ -864,10 +870,10 @@ hyloList {a = a} {b = b} {c = c} coalgebra algebra seed zero =
         t' = const c
 
         algebra' : interp CodeListFunctor (union r' t') `arrow` t'
-        algebra' () = either (const zero) (uncurry algebra)
+        algebra' _ = either (const zero) (uncurry algebra)
 
         coalgebra' : s' `arrow` interp CodeListFunctor (union r' s')
-        coalgebra' () = coalgebra
+        coalgebra' _ = coalgebra
 
 %assert_total
 hyloFactorial : Nat -> Nat
@@ -956,7 +962,7 @@ isoRose r o =
             (\_ => believe_me ())
 
 IsoRose : IxFun () ()
-IsoRose = Iso CodeRose (\r, o => Rose (r o)) isoRose
+IsoRose = Iso CodeRose (Rose .) isoRose
 
 {-
 With isomorphism "established," we can get to concrete maps and folds once
@@ -975,8 +981,8 @@ foldRose {a = a} {r = r} f xs =
         cata {r = const a} {s = const r}
                 (baseFunctor (fromRose {r = const a} {o = ()} xs)) algebra () (fromRose xs)
     where
-        algebra : interp CodeRoseFunctor (union (const a) (const r)) `arrow` const r
-        algebra () (x, y) = f x y
+        algebra : interp (baseFunctor (fromRose {r = const a} {o = ()} xs)) (union (const a) (const r)) `arrow` const r
+        algebra _ = uncurry f
 
 {-
 For some reason, the implementation in GPIF is much more involved, as far as
