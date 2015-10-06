@@ -32,7 +32,7 @@ some of which can be explained by its pre-release status). Totality checker
 is wonky, and attempts to subtly nudge it towards admitting totality often
 seem to result in seriously cryptic type errors. Type errors, in general, are
 *very* cryptic (more so than Haskell's type errors seemed to be when I was
-just starting with it), and while some of that definitely can be atrributed
+just starting with it), and while some of that definitely can be attributed
 to the power of Idris' type system, error reporting in general seems to be
 quite unsatisfactory. (Failure to unify what looks like two instances of the
 same type may be explainable, but it is seriously befuddling to newcomers,

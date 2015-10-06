@@ -70,8 +70,8 @@ isoBoolTwo = MkIso from to iso1 iso2
         iso2 (Right ()) = Refl
 
 {-
-Note this has little bearing on what's to follow, being just another random
-example.
+Note that this has little bearing on what's to follow, being just another
+random example.
 -}
 
 
@@ -128,13 +128,13 @@ dumbIndexedType2 : IndexedType Bool
 dumbIndexedType2 False = Bool
 dumbIndexedType2 True = ()
 
-myMorphism : dumbIndexedType1 `arrow` dumbIndexedType2
-myMorphism False = \() => True
-myMorphism True = \_ => ()
+myArrow : dumbIndexedType1 `arrow` dumbIndexedType2
+myArrow False = \() => True
+myArrow True = \_ => ()
 
 {-
 Depending on which index we want to apply it to -- `True' or `False' --
-`myMorphism' reduces either to a function from unit type to `Bool' or to a
+`myArrow' reduces either to a function from unit type to `Bool' or to a
 function from `Bool' to `()'.
 -}
 
@@ -177,7 +177,8 @@ composeArrow : b `arrow` c -> a `arrow` b -> a `arrow` c
 composeArrow f g index = f index . g index
 
 {-
-We don't really need this, but the arrows compose nicely.
+We don't really need this, but just as an aside, our arrows happen to compose
+nicely.
 -}
 
 
@@ -187,15 +188,21 @@ IndexedFunctor inputIndex outputIndex =
         IndexedType inputIndex -> IndexedType outputIndex
 
 {-
-Indexed functors map indexed types to indexed types. E.g.,
-`IndexedFunctor () Bool' should map all types indexed by unit to types
+Indexed functors map indexed types to indexed types. This means that they
+essentially generalize functors, bifunctors etc. to arbitrary number of type
+parameters. You need an n-ary functor? Just feed it a type indexed by a type
+with n inhabitants! Moreover, indexed functors also map to an indexed type,
+which means that a single indexed functor can represent a whole family of
+"traditional" type constructors.
+
+E.g., `IndexedFunctor () Bool' should map all types indexed by unit to types
 indexed by `Bool'. Note that `IndexedFunctor () Bool' is just:
 
-IndexedType () -> IndexedType Bool
+    IndexedType () -> IndexedType Bool
 
 Which, in turn, can be reduced to:
 
-(() -> Type) -> Bool -> Type
+    (() -> Type) -> Bool -> Type
 
 Can we implement a function like that? Well, sure...
 -}
@@ -240,7 +247,7 @@ mutual
 {-
 First, we build an encoding using the universe pattern. We cannot pattern
 match on types, and in any case, there are limits to what can be done in this
-framework.
+framework, so we need to decide what should be representable first.
 -}
 
     interp : IxFun inputIndex outputIndex -> IndexedFunctor inputIndex outputIndex
@@ -281,6 +288,16 @@ stuff is straightforward and unsurprising:
    allows us to obtain recursive data structures from functors in other
    settings. This is the key piece, and it sheds a lot of light onto what's
    going on here with the whole indexed functors thing.
+
+5. Lastly, we have a bunch of codes helping us to string everything together.
+   `Input' allows us to refer to the "type arguments" -- it represents a
+   functor that maps all the output indices to the type yielded by the
+   indexed type argument when applied to the specified index. `Output' allows
+   us to constrain indexed functors constructed from the codes so that
+   certain values may be constructed only for certain output indices -- this
+   will be useful for encoding mutually recursive data types. Reindexing and
+   the sigma functor will come in useful when we need to deal with
+   representing dependent types.
 -}
 
     data Mu : (baseFunctorRepr : IxFun (Either inputIndex outputIndex) outputIndex) ->
@@ -294,15 +311,18 @@ word) and produces a recursive data type without any parameters. This can be
 generalized to `Mu2' which takes a bifunctor and produces a recursive data
 type with one parameter (which also happens to be a "functor"). In both
 cases, one of the parameters to the base functor is used to plug the functor
-back into itself. There's no simple way to generalize this to arbitrary
-arities without having a sufficiently powerful type system. But the power of
-dependent types is enough to do precisely that!
+back into itself. This means that by applying any of those we're leaving the
+original universe on functors with n type parameters. Moreover, there's no
+simple way to generalize this to arbitrary arities without having a
+sufficiently powerful type system. But the power of dependent types is enough
+to do precisely that!
 
-Indexed functors really are generalizations of covariant functors and
-bifunctors. An "ordinary" functor takes a single type as an argument. An
-indexed functor takes an indexed type -- which can represent arbitrarily many
-types, and thus arbitrarily many arguments. (We can also produce arbitrarily
-many types with our functors, but more on that later.)
+As I mentioned before, indexed functors really are generalizations of
+covariant functors and bifunctors. An "ordinary" functor takes a single type
+as an argument. An indexed functor takes an indexed type -- which can
+represent arbitrarily many types, and thus arbitrarily many arguments. (We
+can also produce arbitrarily many types with our functors, but more on that
+later.)
 
 So this particular definition of `Mu' uses a simple encoding -- argument
 types resulting from indices tagged as `Left' are to be left untouched, while
@@ -607,6 +627,9 @@ CodeRecBool = Fix CodeRecBoolFunctor
 
 {-
 Bwahaha!
+
+Of course, we're just ignoring the recursive type parameters, since we never
+refer to it (using `Input') in the definition of the base functor.
 -}
 
 fromRecBool : Bool -> interp CodeRecBool r o
@@ -720,7 +743,7 @@ Programmer*, let's tackle the age old problem of implementing the factorial
 in the most perverse fashion possible.
 -}
 
-paraNats : a -> (a -> Nat -> a) -> Nat -> a
+paraNats : a -> ((a, Nat) -> a) -> Nat -> a
 paraNats zero suc n =
         para {r = r'} {s = s'} CodeNatsFunctor algebra () (fromNats n)
     where
@@ -731,10 +754,10 @@ paraNats zero suc n =
         s' = const a
 
         algebra : interp CodeNatsFunctor (Main.union r' (\o => Pair (s' o) (interp (Fix CodeNatsFunctor) r' o))) `arrow` s'
-        algebra _ = either (const zero) (\(x, n') => suc x (succ (toNats n')))
+        algebra _ = either (const zero) (\(x, n') => suc (x, toNats n'))
 
 factorial : Nat -> Nat
-factorial = paraNats 1 (*)
+factorial = paraNats 1 (\(x, n) => x * succ n)
 
 {-
 Whee!
@@ -761,8 +784,8 @@ CodeListFunctor = Sum One (Product (Input (Left ())) (Input (Right ())))
 
 {-
 Unlike nats and booleans, lists are polymorphic, so we need two arguments --
-one to specify the type of the elements, and one to plug the base functor
-back into itself.
+one, on the left, to specify the type of the elements, and another one to
+plug the base functor back into itself.
 -}
 
 CodeList : IxFun () ()
@@ -799,7 +822,7 @@ IsoList : IxFun () ()
 IsoList = Iso CodeList (List .) isoList
 
 {-
-Having established the isomorphism between `List's and indexed functor
+Having established the isomorphism between `List's and the indexed functor
 represented by `CodeList', we can now instantiate concrete map and fold for
 lists.
 -}
@@ -913,8 +936,6 @@ CodeRoseFunctor = Product (Input (Left ())) (Composition IsoList (Input (Right (
 GPIF seems to favour using the equivalent of `CodeList' here for some reason,
 but `IsoList' is a first class citizen in the universe, and using it directly
 makes everything a little bit easier.
-
-Note that `Input' effectively discards the output index.
 -}
 
 CodeRose : IxFun () ()
