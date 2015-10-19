@@ -329,7 +329,7 @@ types resulting from indices tagged as `Left' are to be left untouched, while
 those tagged as `Right' are to be plugged back into the functor recursively.
 Thus, `Mu' takes a base indexed functor mapping types indexed with
 `Either a b' to types indexed with `b' and produces a functor mapping types
-indexed with `a' to types indexed by with `b'.
+indexed with `a' to types indexed with `b'.
 
 There is a section with examples below, which should be able to shed further
 light on how all of this works.
@@ -395,7 +395,7 @@ lifting "arrows" defined above, which are really just collections of
 functions working for all the indices involved. The implementation is
 straightforward, and the biggest challenge here is getting the implicit
 parameters to recursive calls right. Unfortunately, unlike Agda used in the
-GPIF paper, Idris doesn't seem capable of doing that on it's own (or I just
+GPIF paper, Idris doesn't seem capable of doing that on its own (or I just
 don't know how to cook it right).
 
 Note that `imap' is actually total, as we cannot build infinite data
