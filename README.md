@@ -41,6 +41,10 @@ be much worse than Agda at figuring out the implicit arguments to function
 application. The Idris code is annotated much more thoroughly because of
 that.
 
+See also a version of the same in Haskell using DataKinds:
+
+https://github.com/pbl64k/gpif-datakinds
+
 Additional reading:
 
 Conor McBride, *Clowns to the Left of me, Jokers to the Right: Dissecting

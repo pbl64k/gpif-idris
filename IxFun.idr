@@ -628,7 +628,7 @@ CodeRecBool = Fix CodeRecBoolFunctor
 {-
 Bwahaha!
 
-Of course, we're just ignoring the recursive type parameters, since we never
+Of course, we're just ignoring the recursive type parameter, since we never
 refer to it (using `Input') in the definition of the base functor.
 -}
 
