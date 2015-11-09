@@ -120,15 +120,15 @@ to the ordinary functions between the types "embedded" in the indexed types.
 A random example:
 -}
 
-dumbIndexedType1 : IndexedType Bool
-dumbIndexedType1 False = ()
-dumbIndexedType1 True = Bool
+DumbIndexedType1 : IndexedType Bool
+DumbIndexedType1 False = ()
+DumbIndexedType1 True = Bool
 
-dumbIndexedType2 : IndexedType Bool
-dumbIndexedType2 False = Bool
-dumbIndexedType2 True = ()
+DumbIndexedType2 : IndexedType Bool
+DumbIndexedType2 False = Bool
+DumbIndexedType2 True = ()
 
-myArrow : dumbIndexedType1 `arrow` dumbIndexedType2
+myArrow : DumbIndexedType1 `arrow` DumbIndexedType2
 myArrow False = \() => True
 myArrow True = \_ => ()
 
@@ -831,7 +831,7 @@ mapList : {a : Type} -> {b : Type} -> (a -> b) -> (List a -> List b)
 mapList {a = a} {b = b} f =
         imap {r = const a} {s = const b} IsoList (lift f) ()
 
-mapListExample : mapList succ [1, 2, 3] = [2, 3, 4]
+mapListExample : mapList Prelude.succ [1, 2, 3] = [2, 3, 4]
 mapListExample = Refl
 
 foldList : {a : Type} -> {r : Type} -> (a -> r -> r) -> r -> List a -> r
@@ -964,13 +964,13 @@ anotherRoseTree : Rose Nat
 anotherRoseTree = Fork 1 [Fork 2 [], Fork 3 [Fork 4 [], Fork 5 []]]
 
 toFromRoseExample1 :
-        toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} someRoseTree) =
-        someRoseTree
+        toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} Main.someRoseTree) =
+        Main.someRoseTree
 toFromRoseExample1 = Refl
 
 toFromRoseExample2 :
-        toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} anotherRoseTree) =
-        anotherRoseTree
+        toRose {r = const Nat} {o = ()} (fromRose {r = const Nat} {o = ()} Main.anotherRoseTree) =
+        Main.anotherRoseTree
 toFromRoseExample2 = Refl
 
 isoRose : (r : IndexedType ()) -> (o : ()) ->
@@ -994,7 +994,7 @@ mapRose : {a : Type} -> {b : Type} -> (a -> b) -> Rose a -> Rose b
 mapRose {a = a} {b = b} f =
         imap {r = const a} {s = const b} IsoRose (lift f) ()
 
-mapRoseExample : mapRose succ someRoseTree = Fork 2 [Fork 3 []]
+mapRoseExample : mapRose Prelude.succ Main.someRoseTree = Fork 2 [Fork 3 []]
 mapRoseExample = Refl
 
 foldRose : {a : Type} -> {r : Type} -> (a -> List r -> r) -> Rose a -> r
@@ -1014,10 +1014,10 @@ instead).
 sumRose : Rose Nat -> Nat
 sumRose = foldRose (\x, xs => x + sumList xs)
 
-sumRoseExample1 : sumRose someRoseTree = 3
+sumRoseExample1 : sumRose Main.someRoseTree = 3
 sumRoseExample1 = Refl
 
-sumRoseExample2 : sumRose anotherRoseTree = 15
+sumRoseExample2 : sumRose Main.anotherRoseTree = 15
 sumRoseExample2 = Refl
 
 
@@ -1067,7 +1067,7 @@ mutual
 someEo : Even Nat Char
 someEo = ECons 1 (OCons 'a' (ECons 2 (OCons 'b' ENil)))
 
-toFromEoExample : toEven (fromEven {r = either (const Nat) (const Char)} someEo) = someEo
+toFromEoExample : toEven (fromEven {r = either (const Nat) (const Char)} Main.someEo) = Main.someEo
 toFromEoExample = Refl
 
 isoEo : (r : IndexedType (Either () ())) -> (o : Either () ()) ->
