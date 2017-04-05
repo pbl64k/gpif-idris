@@ -373,17 +373,16 @@ imap {r = r} {s = s} (Iso repr host isomorphism) f out x =
 imap {r = r} {s = s} (Fix g) f out (In x) =
         In (imap {r = union r (Mu g r)} {s = union s (Mu g s)} g f' out x)
     where
-        %assert_total
         f' : union r (Mu g r) `arrow` union s (Mu g s)
-        f' = split f (imap (Fix g) f)
+        f' = assert_total $ split f (imap (Fix g) f)
 imap (Input inp) f _ x = f inp x
 imap (Output _) _ _ x = x
-imap {r = r} {s = s} (Reindex {inputIndex' = inputIndex'} {outputIndex' = outputIndex'} g h i) f out x = --?what
+imap {r = r} {s = s} (Reindex {inputIndex' = inputIndex'} {outputIndex' = outputIndex'} g h i) f out x =
         imap {inputIndex = inputIndex'} {outputIndex = outputIndex'} {r = r . h} {s = s . h} g f' (i out) x
     where
         f' : arrow {index = inputIndex'} (r . h) (s . h)
         -- For some cryptic reason, `(f . h)' doesn't work.
-        f' inp x = f (h inp) x
+        f' inp = f (h inp)
 imap (Sigma c g) f out (Evidence x pf) = Evidence x (imap (g x) f out pf)
 
 {-
@@ -425,7 +424,6 @@ cata {inputIndex = inputIndex} {outputIndex = outputIndex} {r = r} {s = s}
         s' : IndexedType (Either inputIndex outputIndex)
         s' = union r s
 
-        %assert_total
         f : r' `arrow` s'
         f = split (idArrow {type = r})
                 (cata {r = r} {s = s} baseFunctorRepr algebra)
@@ -553,7 +551,6 @@ para {inputIndex = inputIndex} {outputIndex = outputIndex} {r = r} {s = s}
         -- name, as it appears to clash with `f' below
         fanout g h x = (g x, h x)
 
-        %assert_total
         f : r' `arrow` s'
         f = split (idArrow {type = r})
                 (\ix => fanout (para {r = r} {s = s} baseFunctorRepr algebra ix) id)
@@ -710,20 +707,9 @@ fromNats : Nat -> interp CodeNats r o
 fromNats Z = In (Left ())
 fromNats (S n) = In (Right (fromNats n))
 
-%assert_total
 toNats : interp CodeNats r o -> Nat
 toNats (In (Left ())) = Z
-toNats {r = r} {o = ()} (In (Right n)) = S (toNats n) --(assert_smaller (In (Right n)) n))
-
-{-
-It should be trivial to prove totality here by using `assert_smaller' (for
-that matter, Idris really should be capable of recognizing that the argument
-to recursive call is strictly decreasing here!) -- but it isn't. All my
-attempts to do so ran into a wall of seriously cryptic error messages and
-weird phenomena such as the function apparently being accepted as total, but
-the factorial examples below starting to fail, apparently due to
-non-reduction in types.
--}
+toNats {r = r} {o = ()} (In (Right n)) = S (toNats n)
 
 isoNats : (r : IndexedType Void) -> (o : ()) ->
         Isomorphic Nat (interp CodeNats r o)
@@ -795,14 +781,9 @@ fromList : {r : IndexedType ()} -> {o : ()} -> List (r o) -> interp CodeList r o
 fromList [] = In (Left ())
 fromList {o = ()} (x :: xs) = In (Right (x, fromList xs))
 
-%assert_total
 toList : {r : IndexedType ()} -> {o : ()} -> interp CodeList r o -> List (r o)
 toList (In (Left ())) = []
 toList {o = ()} (In (Right (x, xs))) = x :: toList xs
-
-{-
-Same troubles as with `toNats' above here.
--}
 
 isoList : (r : IndexedType ()) -> (o : ()) ->
         Isomorphic (List (r o)) (interp CodeList r o)
@@ -898,9 +879,8 @@ hyloList {a = a} {b = b} {c = c} coalgebra algebra seed zero =
         coalgebra' : s' `arrow` interp CodeListFunctor (union r' s')
         coalgebra' _ = coalgebra
 
-%assert_total
 hyloFactorial : Nat -> Nat
-hyloFactorial n = hyloList coalg (*) n 1
+hyloFactorial = assert_total $ \n => hyloList coalg (*) n 1
     where
         coalg : Nat -> Either () (Nat, Nat)
         coalg Z = Left ()
@@ -945,7 +925,6 @@ fromRose : {r : IndexedType ()} -> {o : ()} -> Rose (r o) -> interp CodeRose r o
 fromRose {r = r} {o = ()} (Fork x xs) =
         In (x, imap {r = Rose . r} {s = interp CodeRose r} IsoList f () xs)
     where
-        %assert_total
         f : (Rose . r) `arrow` interp CodeRose r
         f () = fromRose
 
@@ -953,7 +932,6 @@ toRose : {r : IndexedType ()} -> {o : ()} -> interp CodeRose r o -> Rose (r o)
 toRose {r = r} {o = ()} (In (x, xs)) =
         Fork x (imap {r = interp CodeRose r} {s = Rose . r} IsoList f () xs)
     where
-        %assert_total
         f : interp CodeRose r `arrow` (Rose . r)
         f () = toRose
 
@@ -1046,7 +1024,6 @@ CodeEo : IxFun (Either () ()) (Either () ())
 CodeEo = Fix CodeEoFunctor
 
 mutual
-    %assert_total
     fromEven : {r : IndexedType (Either () ())} -> Even (r (Left ())) (r (Right ())) -> interp CodeEo r (Left ())
     fromEven ENil = In (Left (Refl, Left ()))
     fromEven (ECons x xs) = In (Left (Refl, Right (x, fromOdd xs)))
@@ -1055,14 +1032,13 @@ mutual
     fromOdd (OCons x xs) = In (Right (Refl, (x, fromEven xs)))
 
 mutual
-    %assert_total
     toEven : {r : IndexedType (Either () ())} -> interp CodeEo r (Left ()) -> Even (r (Left ())) (r (Right ()))
-    toEven (In (Left (_, Left ()))) = ENil
-    toEven (In (Left (_, Right (x, xs)))) = ECons x (toOdd xs)
+    toEven = assert_total $ \z => case z of
+        (In (Left (_, Left ()))) => ENil
+        (In (Left (_, Right (x, xs)))) => ECons x (toOdd xs)
 
-    %assert_total
     toOdd : {r : IndexedType (Either () ())} -> interp CodeEo r (Right ()) -> Odd (r (Left ())) (r (Right ()))
-    toOdd (In (Right (_, (x, xs)))) = OCons x (toEven xs)
+    toOdd = assert_total $ \(In (Right (_, (x, xs)))) => OCons x (toEven xs)
 
 someEo : Even Nat Char
 someEo = ECons 1 (OCons 'a' (ECons 2 (OCons 'b' ENil)))
